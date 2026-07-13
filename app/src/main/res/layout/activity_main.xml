@@ -5,62 +5,199 @@
     android:id="@+id/drawerLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fitsSystemWindows="true">
+    android:fitsSystemWindows="true"
+    android:background="@color/bg_primary">
 
     <!-- Contenido principal -->
-    <LinearLayout
+    <androidx.coordinatorlayout.widget.CoordinatorLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical">
-
-        <!-- Toolbar: el título "WScanner" se muestra aquí, no más duplicados -->
-        <androidx.appcompat.widget.Toolbar
-            android:id="@+id/toolbar"
-            android:layout_width="match_parent"
-            android:layout_height="?attr/actionBarSize"
-            android:background="?attr/colorPrimary"
-            android:elevation="4dp"
-            app:title="WScanner"
-            app:titleTextColor="@android:color/white" />
+        android:layout_height="match_parent">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:orientation="vertical"
-            android:padding="16dp">
+            android:orientation="vertical">
 
+            <!-- Toolbar -->
+            <com.google.android.material.appbar.AppBarLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@color/bg_secondary"
+                app:elevation="0dp">
+
+                <androidx.appcompat.widget.Toolbar
+                    android:id="@+id/toolbar"
+                    android:layout_width="match_parent"
+                    android:layout_height="?attr/actionBarSize"
+                    android:background="@color/bg_secondary"
+                    app:title="WScanner"
+                    app:titleTextColor="#FF00E5FF"
+                    app:subtitleTextColor="#FF8B949E"
+                    app:elevation="0dp" />
+
+                <!-- Progress bar integrated under toolbar -->
+                <ProgressBar
+                    android:id="@+id/progressScan"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="3dp"
+                    android:visibility="gone"
+                    android:progressTint="#FF00E5FF"
+                    android:progressBackgroundTint="#FF21262D" />
+
+            </com.google.android.material.appbar.AppBarLayout>
+
+            <!-- Header de información de red -->
+            <LinearLayout
+                android:id="@+id/layoutNetworkInfo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:background="@drawable/gradient_dark"
+                android:padding="16dp"
+                android:gravity="center_vertical"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/txtSubnet"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="#FF8B949E"
+                        android:textSize="11sp"
+                        android:letterSpacing="0.06"
+                        android:fontFamily="sans-serif-medium"
+                        android:text="SUBRED" />
+
+                    <TextView
+                        android:id="@+id/txtSubnetValue"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="#FF00E5FF"
+                        android:textSize="14sp"
+                        android:fontFamily="sans-serif-medium"
+                        android:text="—"
+                        android:layout_marginTop="2dp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:gravity="center">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="#FF8B949E"
+                        android:textSize="11sp"
+                        android:letterSpacing="0.06"
+                        android:fontFamily="sans-serif-medium"
+                        android:text="DISPOSITIVOS" />
+
+                    <TextView
+                        android:id="@+id/txtDeviceCount"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="#FF3FB950"
+                        android:textSize="24sp"
+                        android:textStyle="bold"
+                        android:fontFamily="sans-serif-medium"
+                        android:text="0"
+                        android:layout_marginTop="2dp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:gravity="end">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="#FF8B949E"
+                        android:textSize="11sp"
+                        android:letterSpacing="0.06"
+                        android:fontFamily="sans-serif-medium"
+                        android:text="GATEWAY" />
+
+                    <TextView
+                        android:id="@+id/txtGatewayValue"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="#FFE6EDF3"
+                        android:textSize="14sp"
+                        android:fontFamily="sans-serif-medium"
+                        android:text="—"
+                        android:layout_marginTop="2dp" />
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <!-- Separator -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/divider" />
+
+            <!-- Status text -->
             <TextView
                 android:id="@+id/txtStatus"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="Presiona Escanear para buscar dispositivos"
-                android:textSize="14sp"
-                android:textColor="@android:color/darker_gray"
-                android:layout_marginBottom="8dp" />
+                android:textSize="13sp"
+                android:textColor="#FF6E7681"
+                android:padding="16dp"
+                android:gravity="center" />
 
-            <ProgressBar
-                android:id="@+id/progressScan"
-                style="?android:attr/progressBarStyleHorizontal"
+            <!-- Separator -->
+            <View
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:visibility="gone"
-                android:layout_marginBottom="8dp" />
+                android:layout_height="1dp"
+                android:background="@color/divider" />
 
-            <Button
-                android:id="@+id/btnScan"
+            <!-- Device list con swipe refresh -->
+            <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+                android:id="@+id/swipeRefresh"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Escanear red"
-                android:layout_marginBottom="12dp" />
+                android:layout_height="match_parent">
 
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/listDevices"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent" />
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/listDevices"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:padding="12dp"
+                    android:clipToPadding="false"
+                    android:background="@color/bg_primary" />
+
+            </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
         </LinearLayout>
 
-    </LinearLayout>
+        <!-- FAB de escaneo -->
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/btnScan"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|end"
+            android:layout_margin="24dp"
+            android:contentDescription="Escanear red"
+            app:backgroundTint="#FF00E5FF"
+            app:tint="#FF0D1117"
+            app:fabSize="normal"
+            app:srcCompat="@drawable/ic_radar"
+            app:elevation="8dp" />
+
+    </androidx.coordinatorlayout.widget.CoordinatorLayout>
 
     <!-- Drawer lateral -->
     <com.google.android.material.navigation.NavigationView
@@ -69,7 +206,12 @@
         android:layout_height="match_parent"
         android:layout_gravity="start"
         android:fitsSystemWindows="true"
+        android:background="@color/bg_secondary"
         app:headerLayout="@layout/nav_header"
-        app:menu="@menu/drawer_menu" />
+        app:menu="@menu/drawer_menu"
+        app:itemTextColor="@color/drawer_text_color"
+        app:itemIconTint="@color/drawer_icon_tint"
+        app:itemBackground="@drawable/drawer_item_bg"
+        app:itemTextAppearance="@style/DrawerText" />
 
 </androidx.drawerlayout.widget.DrawerLayout>

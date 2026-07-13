@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Selector de color para texto del drawer. Cyan brillante activo, blanco grisáceo inactivo. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="#FF00E5FF" android:state_checked="true" />
+    <item android:color="#FF00E5FF" android:state_activated="true" />
+    <item android:color="#FF00E5FF" android:state_selected="true" />
+    <item android:color="#FFE6EDF3" />
+</selector>

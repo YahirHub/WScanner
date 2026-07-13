@@ -1,10 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="purple_200">#FFBB86FC</color>
-    <color name="purple_500">#FF6200EE</color>
-    <color name="purple_700">#FF3700B3</color>
-    <color name="teal_200">#FF03DAC5</color>
-    <color name="teal_700">#FF018786</color>
+    <!-- Fondo oscuro principal -->
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- Palette: dark cyber/network -->
+    <color name="bg_primary">#FF0D1117</color>
+    <color name="bg_secondary">#FF161B22</color>
+    <color name="bg_card">#FF1C2333</color>
+    <color name="bg_surface">#FF21262D</color>
+
+    <!-- Accent: cyan / teal -->
+    <color name="accent_primary">#FF00E5FF</color>
+    <color name="accent_dark">#FF00B8D4</color>
+    <color name="accent_light">#FF18FFFF</color>
+
+    <!-- Text -->
+    <color name="text_primary">#FFE6EDF3</color>
+    <color name="text_secondary">#FF8B949E</color>
+    <color name="text_tertiary">#FF6E7681</color>
+    <color name="text_accent">#FF00E5FF</color>
+
+    <!-- Status -->
+    <color name="status_online">#FF3FB950</color>
+    <color name="status_warning">#FFD29922</color>
+    <color name="status_error">#FFF85149</color>
+
+    <!-- Divider -->
+    <color name="divider">#FF30363D</color>
+
+    <!-- Legacy compat (keep for existing refs) -->
+    <color name="purple_200">#FF00E5FF</color>
+    <color name="purple_500">#FF161B22</color>
+    <color name="purple_700">#FF0D1117</color>
+    <color name="teal_200">#FF18FFFF</color>
+    <color name="teal_700">#FF00B8D4</color>
 </resources>

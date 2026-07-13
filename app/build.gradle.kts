@@ -30,4 +30,8 @@ dependencies {
     implementation(libs.material)
     implementation("androidx.recyclerview:recyclerview:1.4.0")
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
+
+    // Iconics — librería de íconos profesional (Java-compatible)
+    implementation("com.mikepenz:iconics-core:5.5.0")
+    implementation("com.mikepenz:community-material-typeface:7.0.96.1-kotlin@aar")
 }

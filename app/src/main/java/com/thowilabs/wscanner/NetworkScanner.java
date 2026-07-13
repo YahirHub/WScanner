@@ -24,14 +24,19 @@ public class NetworkScanner {
     private static final String TAG = "WScanner.Scanner";
 
     public interface Callback {
+        /**
+         * Llamado cada vez que se encuentra o actualiza un dispositivo.
+         * El caller debe reemplazar/actualizar usando IP como clave.
+         */
         void onDeviceFound(Device device);
+
         void onProgress(int percent, int scanned, int total);
+
         void onFinished(int totalFound);
     }
 
     private VendorResolver vendorResolver;
 
-    // Puertos comunes para inferir tipo de dispositivo
     private static final int[] PROBE_PORTS = {80, 443, 22, 445, 8080, 23, 21, 554, 1883};
 
     public void scan(Context context, Callback callback) {
@@ -59,36 +64,20 @@ public class NetworkScanner {
                 Log.d(TAG, "VendorResolver tiene " + vendorResolver.getEntryCount() + " entradas");
             }
 
-            // ── Adquirir MulticastLock para mDNS y SSDP ──
-            WifiManager.MulticastLock multicastLock = null;
-            try {
-                WifiManager wifi = (WifiManager) context.getApplicationContext()
-                        .getSystemService(Context.WIFI_SERVICE);
-                if (wifi != null) {
-                    multicastLock = wifi.createMulticastLock("WScannerDiscovery");
-                    multicastLock.setReferenceCounted(true);
-                    multicastLock.acquire();
-                    Log.d(TAG, "🔒 MulticastLock adquirido");
-                }
-            } catch (Exception e) {
-                Log.w(TAG, "No se pudo adquirir MulticastLock: " + e.getMessage());
-            }
-
             int total = 254;
             AtomicInteger scanned = new AtomicInteger(0);
             Set<String> foundIps = ConcurrentHashMap.newKeySet();
-            Map<String, String> hostnames = new ConcurrentHashMap<>();
-            Map<String, String> openPorts = new ConcurrentHashMap<>();
-            Map<String, String> httpBanners = new ConcurrentHashMap<>();
 
-            // ── FASE 1: Ping sweep + DNS inverso ──
+            // ── Adquirir MulticastLock ──
+            WifiManager.MulticastLock multicastLock = acquireMulticastLock(context);
+
+            // ── FASE 1: Ping sweep → emitir cada dispositivo inmediatamente ──
+            Log.i(TAG, "────────────────────────────────────────");
+            Log.i(TAG, "🔍 FASE 1: Ping sweep + DNS inverso (10 hilos)");
+
             int threads = 10;
             Thread[] workers = new Thread[threads];
 
-            Log.i(TAG, "────────────────────────────────────────");
-            Log.i(TAG, "🔍 FASE 1: Ping sweep + DNS inverso (" + threads + " hilos)");
-
-            long tPhase1 = System.currentTimeMillis();
             for (int t = 0; t < threads; t++) {
                 final int threadId = t;
                 workers[t] = new Thread(() -> {
@@ -98,46 +87,51 @@ public class NetworkScanner {
                             InetAddress addr = InetAddress.getByName(host);
                             if (addr.isReachable(300)) {
                                 foundIps.add(host);
-                                Log.v(TAG, "  ✅ Ping OK: " + host);
 
-                                String hostname = addr.getCanonicalHostName();
-                                if (hostname != null && !hostname.equals(host)
-                                        && !hostname.isEmpty() && !hostname.equals(addr.getHostAddress())) {
-                                    hostnames.put(host, hostname);
-                                    Log.v(TAG, "  🏷️  DNS (canonical): " + host + " → " + hostname);
+                                String dnsName = null;
+                                String canonical = addr.getCanonicalHostName();
+                                if (canonical != null && !canonical.equals(host)
+                                        && !canonical.isEmpty() && !canonical.equals(addr.getHostAddress())) {
+                                    dnsName = canonical;
                                 } else {
                                     String h2 = addr.getHostName();
                                     if (h2 != null && !h2.equals(host)
                                             && !h2.isEmpty() && !h2.equals(addr.getHostAddress())) {
-                                        hostnames.put(host, h2);
-                                        Log.v(TAG, "  🏷️  DNS (hostname): " + host + " → " + h2);
+                                        dnsName = h2;
                                     }
                                 }
-                            }
-                        } catch (Exception ignored) {}
 
+                                // Emitir dispositivo básico inmediatamente
+                                String name = guessType(host, gateway, null);
+                                String discoverySource = "Heurística";
+                                String discoveryDetail = null;
+                                if (dnsName != null) {
+                                    name = dnsName;
+                                    discoverySource = "DNS";
+                                    discoveryDetail = dnsName;
+                                }
+                                callback.onDeviceFound(new Device(name, host,
+                                        "N/A", "Desconocido", discoverySource, discoveryDetail));
+                            }
+                        } catch (Exception ignored) {
+                        }
                         int done = scanned.incrementAndGet();
-                        int pct = (done * 100) / total;
+                        int pct = (done * 70) / total;
                         callback.onProgress(pct, done, total);
                     }
                 });
                 workers[t].start();
             }
 
-            // ── FASE 1.5: mDNS discovery (en paralelo con el ping) ──
+            // ── FASE 1.5: mDNS (paralelo al ping, service discovery) ──
             final Map<String, String> mdnsNames = new ConcurrentHashMap<>();
             Thread mdnsThread = new Thread(() -> {
                 try {
-                    // Obtener la IP local para unicast en el socket multicast
                     InetAddress localAddr = getLocalInetAddress(context);
                     if (localAddr != null) {
-                        // Esperar a que el ping encuentre algunas IPs primero
-                        Thread.sleep(1500);
-                        Set<String> ipsSnapshot = new HashSet<>(foundIps);
-                        Map<String, String> mdns = MdnsDiscovery.discover(ipsSnapshot, localAddr);
+                        // Service discovery inmediato, no necesita IPs
+                        Map<String, String> mdns = MdnsDiscovery.discoverServiceDiscovery(localAddr);
                         mdnsNames.putAll(mdns);
-                    } else {
-                        Log.w(TAG, "No se pudo obtener InetAddress local para mDNS");
                     }
                 } catch (Exception e) {
                     Log.w(TAG, "Error en mDNS: " + e.getMessage());
@@ -145,11 +139,11 @@ public class NetworkScanner {
             });
             mdnsThread.start();
 
-            // ── FASE 1.6: SSDP discovery (en paralelo con ping y mDNS) ──
+            // ── FASE 1.6: SSDP (paralelo) ──
             final Map<String, String> ssdpNames = new ConcurrentHashMap<>();
             Thread ssdpThread = new Thread(() -> {
                 try {
-                    Thread.sleep(500); // pequeño delay para no saturar
+                    Thread.sleep(500);
                     Map<String, String> ssdp = SsdpDiscovery.discover();
                     ssdpNames.putAll(ssdp);
                 } catch (Exception e) {
@@ -158,45 +152,82 @@ public class NetworkScanner {
             });
             ssdpThread.start();
 
-            // Esperar a que termine el ping
-            for (Thread w : workers) { try { w.join(); } catch (InterruptedException ignored) {} }
+            // Esperar que termine el ping
+            for (Thread w : workers) {
+                try { w.join(); } catch (InterruptedException ignored) {}
+            }
+            Log.i(TAG, "✅ FASE 1 completada: " + foundIps.size() + " hosts vivos");
 
-            long elapsed1 = System.currentTimeMillis() - tPhase1;
-            Log.i(TAG, "✅ FASE 1 completada en " + elapsed1 + " ms");
-            Log.i(TAG, "   Hosts vivos (ping): " + foundIps.size());
-            Log.i(TAG, "   Hostnames DNS: " + hostnames.size());
+            callback.onProgress(70, total, total);
 
-            callback.onProgress(100, total, total);
-
-            // Esperar a que terminen mDNS y SSDP
+            // ── FASE 1.5: Esperar mDNS service discovery → emitir/actualizar ──
             try { mdnsThread.join(8000); } catch (InterruptedException ignored) {}
-            try { ssdpThread.join(6000); } catch (InterruptedException ignored) {}
-
-            Log.i(TAG, "────────────────────────────────────────");
-            Log.i(TAG, "🔵 FASE 1.5: mDNS → " + mdnsNames.size() + " nombres");
-            Log.i(TAG, "🟢 FASE 1.6: SSDP → " + ssdpNames.size() + " nombres");
-
-            // ── FASE 2: ARP table (seguirá fallando, mantenemos para consistencia) ──
-            Log.i(TAG, "────────────────────────────────────────");
-            Log.i(TAG, "🔍 FASE 2: Lectura de tabla ARP (14 métodos)");
-
-            try { Thread.sleep(500); } catch (InterruptedException ignored) {}
-            long tPhase2 = System.currentTimeMillis();
-            Map<String, String> arpTable = readArpEveryWay();
-            long elapsed2 = System.currentTimeMillis() - tPhase2;
-            Log.i(TAG, "✅ FASE 2 completada en " + elapsed2 + " ms");
-            Log.i(TAG, "   Entradas ARP obtenidas: " + arpTable.size());
-            if (arpTable.isEmpty()) {
-                Log.w(TAG, "   ⚠️  Todos los métodos ARP fallaron (Android 10+)");
-                Log.w(TAG, "   ⚠️  Sin MACs no se puede resolver fabricante desde la OUI DB");
-                Log.w(TAG, "   💡 Se usarán mDNS/SSDP/NetBIOS/HTTP para identificar dispositivos");
+            Log.i(TAG, "🔵 mDNS service discovery: " + mdnsNames.size() + " nombres");
+            for (Map.Entry<String, String> e : mdnsNames.entrySet()) {
+                String ip = e.getKey();
+                String mdnsName = e.getValue();
+                if (foundIps.contains(ip)) {
+                    callback.onDeviceFound(new Device(mdnsName, ip,
+                            "N/A", "Desconocido", "mDNS", mdnsName));
+                }
             }
 
-            // ── FASE 3: Port scanning + HTTP banner grab ──
-            Log.i(TAG, "────────────────────────────────────────");
-            Log.i(TAG, "🔍 FASE 3: Port scanning + HTTP fingerprint en " + foundIps.size() + " hosts");
+            // ── FASE 1.55: mDNS reverse lookup (con lista completa de IPs) ──
+            Log.i(TAG, "🔵 mDNS reverse lookup para " + foundIps.size() + " IPs");
+            try {
+                InetAddress localAddr = getLocalInetAddress(context);
+                if (localAddr != null) {
+                    Map<String, String> reverseMdns = MdnsDiscovery.discoverReverseLookups(
+                            new HashSet<>(foundIps), localAddr);
+                    Log.i(TAG, "🔵 mDNS reverse: " + reverseMdns.size() + " nombres adicionales");
+                    for (Map.Entry<String, String> e : reverseMdns.entrySet()) {
+                        String ip = e.getKey();
+                        if (foundIps.contains(ip) && !mdnsNames.containsKey(ip)) {
+                            callback.onDeviceFound(new Device(e.getValue(), ip,
+                                    "N/A", "Desconocido", "mDNS", e.getValue()));
+                        }
+                    }
+                }
+            } catch (Exception ex) {
+                Log.w(TAG, "Error en mDNS reverse: " + ex.getMessage());
+            }
 
-            long tPhase3 = System.currentTimeMillis();
+            // ── FASE 1.6: Esperar SSDP → emitir/actualizar ──
+            try { ssdpThread.join(6000); } catch (InterruptedException ignored) {}
+            Log.i(TAG, "🟢 SSDP: " + ssdpNames.size() + " dispositivos");
+            for (Map.Entry<String, String> e : ssdpNames.entrySet()) {
+                String ip = e.getKey();
+                String ssdpName = e.getValue();
+                if (foundIps.contains(ip)) {
+                    callback.onDeviceFound(new Device(ssdpName, ip,
+                            "N/A", "Desconocido", "SSDP", ssdpName));
+                }
+            }
+
+            callback.onProgress(75, total, total);
+
+            // ── FASE 2: ARP (mantenemos consistencia, siempre vacío en Android 10+) ──
+            Log.i(TAG, "🔍 FASE 2: ARP (14 métodos)");
+            Map<String, String> arpTable = readArpEveryWay();
+            Log.i(TAG, "   ARP: " + arpTable.size() + " entradas");
+
+            // Si algún ARP dio resultado, procesarlo
+            for (Map.Entry<String, String> e : arpTable.entrySet()) {
+                String ip = e.getKey();
+                String mac = e.getValue();
+                String vendor = vendorResolver.resolve(mac);
+                if (foundIps.contains(ip)) {
+                    callback.onDeviceFound(new Device(
+                            vendor.equals("Desconocido") ? ("Equipo ." + ip.substring(ip.lastIndexOf('.') + 1)) : vendor,
+                            ip, mac, vendor, "OUI DB", vendor));
+                }
+            }
+
+            callback.onProgress(80, total, total);
+
+            // ── FASE 3: Port scanning + HTTP banner → emitir/actualizar ──
+            Log.i(TAG, "🔍 FASE 3: Port scanning en " + foundIps.size() + " hosts");
+
             int portScanned = 0;
             for (String ip : foundIps) {
                 StringBuilder ports = new StringBuilder();
@@ -207,188 +238,95 @@ public class NetworkScanner {
                 }
                 if (ports.length() > 0) {
                     String portStr = ports.toString().trim();
-                    openPorts.put(ip, portStr);
-                    Log.i(TAG, "  🔌 " + ip + " → puertos abiertos: [" + portStr + "]");
+                    Log.i(TAG, "  🔌 " + ip + " → [" + portStr + "]");
 
-                    // HTTP banner grab en puertos 80, 443, 8080
+                    // HTTP banner
                     if (portStr.contains("80") || portStr.contains("8080") || portStr.contains("443")) {
                         String banner = grabHttpBanner(ip);
                         if (banner != null) {
-                            httpBanners.put(ip, banner);
-                            Log.i(TAG, "  🌐 HTTP banner en " + ip + ": " + banner);
+                            String name = guessType(ip, gateway, portStr);
+                            // Si ya tiene mDNS/SSDP, no sobreescribir con banner
+                            if (!mdnsNames.containsKey(ip) && !ssdpNames.containsKey(ip)) {
+                                callback.onDeviceFound(new Device(banner, ip,
+                                        "N/A", "Desconocido", "HTTP", banner));
+                            } else {
+                                callback.onDeviceFound(new Device(name, ip,
+                                        "N/A", "Desconocido", "Heurística",
+                                        "Puertos: " + portStr + "  " + banner));
+                            }
                         }
                     }
                 }
+
+                // Actualizar con info de puertos si no hay mejor nombre
+                // (ya se emitió en Fase 1, los demás casos se cubren arriba)
+
                 portScanned++;
-                int pct2 = 100 + (portScanned * 10 / Math.max(foundIps.size(), 1));
-                callback.onProgress(Math.min(pct2, 100), total + portScanned, total);
+                int pct2 = 80 + (portScanned * 10 / Math.max(foundIps.size(), 1));
+                callback.onProgress(Math.min(pct2, 90), total + portScanned, total);
             }
-            long elapsed3 = System.currentTimeMillis() - tPhase3;
-            Log.i(TAG, "✅ FASE 3 completada en " + elapsed3 + " ms");
-            Log.i(TAG, "   Hosts con puertos abiertos: " + openPorts.size());
-            Log.i(TAG, "   HTTP banners: " + httpBanners.size());
+            Log.i(TAG, "✅ FASE 3 completada");
 
-            // ── FASE 3.5: NetBIOS probe (solo IPs con SMB/NetBIOS) ──
-            Log.i(TAG, "────────────────────────────────────────");
-            Log.i(TAG, "🔍 FASE 3.5: NetBIOS probe en IPs con SMB");
-
+            // ── FASE 3.5: NetBIOS → emitir/actualizar ──
+            Log.i(TAG, "🔍 FASE 3.5: NetBIOS");
             Set<String> smbIps = new HashSet<>();
             for (String ip : foundIps) {
-                String ports = openPorts.get(ip);
-                if (ports != null && (ports.contains("445") || ports.contains("139"))) {
+                // Intentar en IPs sin identificación aún
+                if (!mdnsNames.containsKey(ip) && !ssdpNames.containsKey(ip)
+                        && !arpTable.containsKey(ip) && !ip.equals(gateway)) {
                     smbIps.add(ip);
-                }
-            }
-            // También intentar en IPs sin puertos (por si el firewall bloquea TCP pero permite UDP 137)
-            // Solo en IPs que no respondieron a nada más (genéricas)
-            if (smbIps.isEmpty()) {
-                for (String ip : foundIps) {
-                    if (!openPorts.containsKey(ip) && !mdnsNames.containsKey(ip)
-                            && !ssdpNames.containsKey(ip) && !ip.equals(gateway)) {
-                        smbIps.add(ip);
-                        if (smbIps.size() >= 10) break; // máximo 10 intentos sin pistas
-                    }
+                    if (smbIps.size() >= 10) break;
                 }
             }
             Map<String, String> netbiosNames = NetBiosDiscovery.discover(smbIps);
-
-            // ── FASE 4: Construir dispositivos con naming multicapa ──
-            Log.i(TAG, "────────────────────────────────────────");
-            Log.i(TAG, "🔍 FASE 4: Construyendo dispositivos (" + foundIps.size() + " IPs)");
-
-            int found = 0;
-            for (String ip : foundIps) {
-                String mac = arpTable.getOrDefault(ip, "N/A");
-                String vendor = vendorResolver.resolve(mac);
-                String hostname = hostnames.get(ip);
-                String ports = openPorts.get(ip);
-                String httpBanner = httpBanners.get(ip);
-                String mdnsName = mdnsNames.get(ip);
-                String ssdpName = ssdpNames.get(ip);
-                String netbiosName = netbiosNames.get(ip);
-
-                Log.d(TAG, "┌─ Dispositivo " + (found + 1) + " ────────────────────");
-                Log.d(TAG, "│  IP:          " + ip);
-                Log.d(TAG, "│  MAC:         " + mac);
-                Log.d(TAG, "│  Vendor:      " + vendor);
-                Log.d(TAG, "│  mDNS:        " + (mdnsName != null ? mdnsName : "(no)"));
-                Log.d(TAG, "│  SSDP:        " + (ssdpName != null ? ssdpName : "(no)"));
-                Log.d(TAG, "│  NetBIOS:     " + (netbiosName != null ? netbiosName : "(no)"));
-                Log.d(TAG, "│  DNS:         " + (hostname != null ? hostname : "(no)"));
-                Log.d(TAG, "│  HTTP:        " + (httpBanner != null ? httpBanner : "(no)"));
-                Log.d(TAG, "│  Puertos:     " + (ports != null ? ports : "(ninguno)"));
-                Log.d(TAG, "│  Gateway?:    " + ip.equals(gateway));
-
-                DeviceNameResult nameResult = buildDeviceName(ip, gateway,
-                        vendor,
-                        mdnsName, ssdpName, netbiosName,
-                        hostname, httpBanner, ports);
-
-                Log.i(TAG, "│  🏷️  Nombre [" + nameResult.source + "]: " + nameResult.name);
-                Log.d(TAG, "└──────────────────────────────────────");
-
-                callback.onDeviceFound(new Device(nameResult.name, ip, mac, vendor,
-                        nameResult.source, nameResult.detail));
-                found++;
+            for (Map.Entry<String, String> e : netbiosNames.entrySet()) {
+                String ip = e.getKey();
+                if (foundIps.contains(ip)) {
+                    callback.onDeviceFound(new Device(e.getValue(), ip,
+                            "N/A", "Desconocido", "NetBIOS", e.getValue()));
+                }
             }
+            Log.i(TAG, "   NetBIOS: " + netbiosNames.size() + " nombres");
+
+            callback.onProgress(100, total, total);
 
             // ── Liberar MulticastLock ──
             if (multicastLock != null) {
-                try {
-                    multicastLock.release();
-                    Log.d(TAG, "🔓 MulticastLock liberado");
-                } catch (Exception ignored) {}
+                try { multicastLock.release(); } catch (Exception ignored) {}
             }
 
             Log.i(TAG, "═══════════════════════════════════════");
-            Log.i(TAG, "🏁 ESCANEO COMPLETO: " + found + " dispositivos encontrados");
+            Log.i(TAG, "🏁 ESCANEO COMPLETO: " + foundIps.size() + " hosts");
             Log.i(TAG, "═══════════════════════════════════════");
 
-            callback.onFinished(found);
+            callback.onFinished(foundIps.size());
         }).start();
     }
 
-    // ════════════════════ Naming multicapa ═══════════════════════
+    // ════════════════════ MulticastLock ══════════════════════════
 
-    /**
-     * Resultado del naming: nombre + fuente de dónde se obtuvo.
-     */
-    static class DeviceNameResult {
-        final String name;
-        final String source;
-        final String detail;
-
-        DeviceNameResult(String name, String source, String detail) {
-            this.name = name;
-            this.source = source;
-            this.detail = detail;
+    private WifiManager.MulticastLock acquireMulticastLock(Context context) {
+        try {
+            WifiManager wifi = (WifiManager) context.getApplicationContext()
+                    .getSystemService(Context.WIFI_SERVICE);
+            if (wifi != null) {
+                WifiManager.MulticastLock lock = wifi.createMulticastLock("WScannerDiscovery");
+                lock.setReferenceCounted(true);
+                lock.acquire();
+                Log.d(TAG, "🔒 MulticastLock adquirido");
+                return lock;
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "No se pudo adquirir MulticastLock: " + e.getMessage());
         }
-    }
-
-    /**
-     * Prioridad de nombrado (de mayor a menor confianza):
-     *   1. Vendor OUI DB (solo si tenemos MAC real)
-     *   2. mDNS hostname
-     *   3. SSDP friendlyName / SERVER
-     *   4. NetBIOS name
-     *   5. DNS hostname
-     *   6. HTTP server header / title
-     *   7. Heurística por puertos + IP
-     */
-    private DeviceNameResult buildDeviceName(String ip, String gateway,
-                                              String vendor,
-                                              String mdnsName, String ssdpName,
-                                              String netbiosName,
-                                              String dnsHostname,
-                                              String httpBanner,
-                                              String ports) {
-
-        // 1. Vendor desde MAC OUI
-        if (!vendor.equals("Desconocido")) {
-            return new DeviceNameResult(vendor, "OUI DB", vendor);
-        }
-
-        // 2. mDNS
-        if (mdnsName != null && !mdnsName.isEmpty()) {
-            return new DeviceNameResult(mdnsName, "mDNS", mdnsName);
-        }
-
-        // 3. SSDP
-        if (ssdpName != null && !ssdpName.isEmpty()) {
-            return new DeviceNameResult(ssdpName, "SSDP", ssdpName);
-        }
-
-        // 4. NetBIOS
-        if (netbiosName != null && !netbiosName.isEmpty()) {
-            return new DeviceNameResult(netbiosName, "NetBIOS", netbiosName);
-        }
-
-        // 5. DNS
-        if (dnsHostname != null && !dnsHostname.isEmpty()) {
-            return new DeviceNameResult(dnsHostname, "DNS", dnsHostname);
-        }
-
-        // 6. HTTP banner
-        if (httpBanner != null && !httpBanner.isEmpty()) {
-            return new DeviceNameResult(httpBanner, "HTTP", httpBanner);
-        }
-
-        // 7. Heurística
-        return new DeviceNameResult(guessType(ip, gateway, ports),
-                "Heurística", null);
+        return null;
     }
 
     // ════════════════════ HTTP Banner Grab ═══════════════════════
 
-    /**
-     * Hace GET / a la IP y extrae Server header + HTML title.
-     * Timeout corto: 1500 ms.
-     */
     private String grabHttpBanner(String ip) {
-        // Intentar HTTP (puerto 80)
         String result = grabHttpBannerPort(ip, 80);
         if (result != null) return result;
-        // Intentar puerto 8080
         return grabHttpBannerPort(ip, 8080);
     }
 
@@ -408,17 +346,11 @@ public class NetworkScanner {
             String contentType = conn.getHeaderField("Content-Type");
 
             StringBuilder result = new StringBuilder();
-
-            // Server header
             if (server != null && !server.isEmpty()) {
-                String cleanServer = server.replaceAll("\\s+", " ").trim();
-                if (cleanServer.length() > 60) {
-                    cleanServer = cleanServer.substring(0, 57) + "...";
-                }
-                result.append("Server: ").append(cleanServer);
+                String clean = server.replaceAll("\\s+", " ").trim();
+                if (clean.length() > 60) clean = clean.substring(0, 57) + "...";
+                result.append(clean);
             }
-
-            // HTML title — solo si el contenido es html
             if (contentType != null && contentType.contains("html") && code == 200) {
                 try {
                     BufferedReader reader = new BufferedReader(
@@ -434,111 +366,64 @@ public class NetworkScanner {
                     String title = extractTitle(html.toString());
                     if (title != null && !title.isEmpty()) {
                         if (result.length() > 0) result.append(" | ");
-                        result.append("Title: ").append(title);
+                        result.append(title);
                     }
-                } catch (Exception e) {
-                    Log.v(TAG, "Error leyendo HTML de " + ip + ":" + port + ": " + e.getMessage());
-                }
+                } catch (Exception ignored) {}
             }
-
             conn.disconnect();
-
-            if (result.length() > 0) return result.toString();
-
-        } catch (Exception e) {
-            Log.v(TAG, "HTTP error " + ip + ":" + port + ": " + e.getMessage());
+            return result.length() > 0 ? result.toString() : null;
+        } catch (Exception ignored) {
         } finally {
-            if (conn != null) {
-                try { conn.disconnect(); } catch (Exception ignored) {}
-            }
+            if (conn != null) { try { conn.disconnect(); } catch (Exception ignored) {} }
         }
         return null;
     }
 
     private String extractTitle(String html) {
         String lower = html.toLowerCase();
-        int startIdx = lower.indexOf("<title>");
-        if (startIdx < 0) {
-            startIdx = lower.indexOf("<title ");
-            if (startIdx >= 0) {
-                // <title attr="val">
-                int gt = lower.indexOf(">", startIdx);
+        int start = lower.indexOf("<title>");
+        if (start < 0) {
+            start = lower.indexOf("<title ");
+            if (start >= 0) {
+                int gt = lower.indexOf(">", start);
                 if (gt < 0) return null;
-                startIdx = gt + 1;
+                start = gt + 1;
             } else {
                 return null;
             }
         } else {
-            startIdx += 7; // "<title>".length()
+            start += 7;
         }
-
-        int endIdx = lower.indexOf("</title>", startIdx);
-        if (endIdx < 0) return null;
-
-        String title = html.substring(startIdx, endIdx).trim();
-        // Limpiar entidades HTML básicas
-        title = title.replace("&amp;", "&")
+        int end = lower.indexOf("</title>", start);
+        if (end < 0) return null;
+        String title = html.substring(start, end).trim()
+                .replace("&amp;", "&")
                 .replace("&lt;", "<")
                 .replace("&gt;", ">")
                 .replace("&quot;", "\"")
                 .replace("&#39;", "'");
-
-        if (title.length() > 80) {
-            title = title.substring(0, 77) + "...";
-        }
-
-        return title.isEmpty() ? null : title;
+        return title.isEmpty() ? null : (title.length() > 80 ? title.substring(0, 77) + "..." : title);
     }
 
     // ════════════════════ Nombrado heurístico ═════════════════════
 
     private String guessType(String ip, String gateway, String ports) {
-        boolean isGw = ip.equals(gateway);
         String portInfo = (ports != null) ? ports : "";
 
-        Log.v(TAG, "    guessType(ip=" + ip + ", gw=" + gateway + ", ports=" + portInfo + ")");
-
-        if (isGw) {
-            Log.v(TAG, "    → Router / Puerta de enlace");
-            return "Router / Puerta de enlace";
-        }
+        if (ip.equals(gateway)) return "Router / Puerta de enlace";
 
         if (portInfo.contains("80") || portInfo.contains("443") || portInfo.contains("8080")) {
-            if (portInfo.contains("554")) {
-                Log.v(TAG, "    → Cámara IP (HTTP + RTSP)");
-                return "Cámara IP";
-            }
-            if (portInfo.contains("23") || portInfo.contains("22")) {
-                Log.v(TAG, "    → Servidor / NAS (HTTP + SSH/Telnet)");
-                return "Servidor / NAS";
-            }
-            Log.v(TAG, "    → Servicio web");
+            if (portInfo.contains("554")) return "Cámara IP";
+            if (portInfo.contains("23") || portInfo.contains("22")) return "Servidor / NAS";
             return "Servicio web";
         }
-        if (portInfo.contains("445") || portInfo.contains("139")) {
-            Log.v(TAG, "    → PC / NAS (SMB)");
-            return "PC / NAS (SMB)";
-        }
-        if (portInfo.contains("22") && !portInfo.contains("80")) {
-            Log.v(TAG, "    → Servidor SSH");
-            return "Servidor SSH";
-        }
-        if (portInfo.contains("1883")) {
-            Log.v(TAG, "    → Dispositivo IoT (MQTT)");
-            return "Dispositivo IoT (MQTT)";
-        }
-        if (portInfo.contains("554")) {
-            Log.v(TAG, "    → Cámara IP (RTSP)");
-            return "Cámara IP (RTSP)";
-        }
-        if (ip.endsWith(".1") || ip.endsWith(".254")) {
-            Log.v(TAG, "    → Posible router / Gateway");
-            return "Posible router / Gateway";
-        }
+        if (portInfo.contains("445") || portInfo.contains("139")) return "PC / NAS (SMB)";
+        if (portInfo.contains("22")) return "Servidor SSH";
+        if (portInfo.contains("1883")) return "IoT (MQTT)";
+        if (portInfo.contains("554")) return "Cámara IP (RTSP)";
+        if (ip.endsWith(".1") || ip.endsWith(".254")) return "Posible router";
 
-        String fallback = "Equipo ." + ip.substring(ip.lastIndexOf('.') + 1);
-        Log.v(TAG, "    → " + fallback);
-        return fallback;
+        return "Equipo ." + ip.substring(ip.lastIndexOf('.') + 1);
     }
 
     // ════════════════════ Port scanning ══════════════════════════
@@ -552,7 +437,7 @@ public class NetworkScanner {
         }
     }
 
-    // ════════════════════ IP local como InetAddress ══════════════
+    // ════════════════════ IP local ═══════════════════════════════
 
     private InetAddress getLocalInetAddress(Context context) {
         try {
@@ -562,7 +447,7 @@ public class NetworkScanner {
                 WifiInfo info = wifi.getConnectionInfo();
                 int ip = info.getIpAddress();
                 if (ip != 0) {
-                    byte[] addr = new byte[] {
+                    byte[] addr = new byte[]{
                             (byte) (ip & 0xFF),
                             (byte) ((ip >> 8) & 0xFF),
                             (byte) ((ip >> 16) & 0xFF),
@@ -577,102 +462,75 @@ public class NetworkScanner {
         return null;
     }
 
-    // ════════════════════ ARP — todos los métodos ═════════════════
+    // ════════════════════ ARP — 14 métodos ═══════════════════════
 
     private Map<String, String> readArpEveryWay() {
         Map<String, String> arp;
         int method = 0;
 
-        method++; arp = readArpFile("/proc/net/arp");
-        logArpResult(1, "FileReader /proc/net/arp", arp);
+        method++;
+        arp = readArpFile("/proc/net/arp");
         if (!arp.isEmpty()) return arp;
-
-        method++; arp = runShell("/system/bin/cat /proc/net/arp");
-        logArpResult(method, "/system/bin/cat /proc/net/arp", arp);
+        method++;
+        arp = runShell("/system/bin/cat /proc/net/arp");
         if (!arp.isEmpty()) return arp;
-
-        method++; arp = runShell("/bin/cat /proc/net/arp");
-        logArpResult(method, "/bin/cat /proc/net/arp", arp);
+        method++;
+        arp = runShell("/bin/cat /proc/net/arp");
         if (!arp.isEmpty()) return arp;
-
-        method++; arp = runShell("cat /proc/net/arp");
-        logArpResult(method, "cat /proc/net/arp", arp);
+        method++;
+        arp = runShell("cat /proc/net/arp");
         if (!arp.isEmpty()) return arp;
-
-        method++; arp = runShell("/system/bin/ip neigh show");
-        logArpResult(method, "/system/bin/ip neigh show", arp);
+        method++;
+        arp = runShell("/system/bin/ip neigh show");
         if (!arp.isEmpty()) return arp;
-
-        method++; arp = runShell("/system/bin/ip neigh");
-        logArpResult(method, "/system/bin/ip neigh", arp);
+        method++;
+        arp = runShell("/system/bin/ip neigh");
         if (!arp.isEmpty()) return arp;
-
-        method++; arp = runShell("ip neigh show");
-        logArpResult(method, "ip neigh show", arp);
+        method++;
+        arp = runShell("ip neigh show");
         if (!arp.isEmpty()) return arp;
-
-        method++; arp = runShell("ip neigh");
-        logArpResult(method, "ip neigh", arp);
+        method++;
+        arp = runShell("ip neigh");
         if (!arp.isEmpty()) return arp;
-
-        method++; arp = runShell("/system/bin/arp -a");
-        logArpResult(method, "/system/bin/arp -a", arp);
+        method++;
+        arp = runShell("/system/bin/arp -a");
         if (!arp.isEmpty()) return arp;
-
-        method++; arp = runShell("/system/xbin/arp -a");
-        logArpResult(method, "/system/xbin/arp -a", arp);
+        method++;
+        arp = runShell("/system/xbin/arp -a");
         if (!arp.isEmpty()) return arp;
-
-        method++; arp = runShell("arp -a");
-        logArpResult(method, "arp -a", arp);
+        method++;
+        arp = runShell("arp -a");
         if (!arp.isEmpty()) return arp;
-
-        method++; arp = runShell("/system/xbin/busybox arp -a");
-        logArpResult(method, "/system/xbin/busybox arp -a", arp);
+        method++;
+        arp = runShell("/system/xbin/busybox arp -a");
         if (!arp.isEmpty()) return arp;
+        method++;
+        arp = runShell("busybox arp -a");
 
-        method++; arp = runShell("busybox arp -a");
-        logArpResult(method, "busybox arp -a", arp);
-
-        Log.w(TAG, "⚠️  Ninguno de los " + method + " métodos ARP dio resultados");
+        Log.w(TAG, "⚠️  " + method + " métodos ARP intentados, 0 resultados");
         return arp;
-    }
-
-    private void logArpResult(int method, String cmd, Map<String, String> result) {
-        String status = result.isEmpty() ? "❌ vacío/error" : "✅ " + result.size() + " entradas";
-        Log.d(TAG, "  ARP método #" + method + ": " + cmd + " → " + status);
     }
 
     private Map<String, String> readArpFile(String path) {
         Map<String, String> arp = new HashMap<>();
-        try (BufferedReader br = new BufferedReader(
-                new java.io.FileReader(path))) {
+        try (BufferedReader br = new BufferedReader(new java.io.FileReader(path))) {
             String line;
             boolean header = true;
-            int count = 0;
             while ((line = br.readLine()) != null) {
                 if (header) { header = false; continue; }
                 line = line.trim();
                 if (line.isEmpty()) continue;
-                count++;
-                Log.v(TAG, "    ARP raw line[" + count + "]: \"" + line + "\"");
                 String[] parts = line.split("\\s+");
                 if (parts.length >= 4) {
-                    String ip = parts[0];
-                    String mac = parts[3];
-                    String flags = parts.length >= 3 ? parts[2] : "";
+                    String ip = parts[0], mac = parts[3], flags = parts.length >= 3 ? parts[2] : "";
                     if (!"00:00:00:00:00:00".equals(mac)
                             && mac.matches("[0-9a-fA-F:]{17}")
                             && (flags.contains("2") || flags.contains("02"))) {
                         arp.put(ip, mac.toUpperCase());
-                        Log.d(TAG, "    ARP ✓: " + ip + " → " + mac.toUpperCase());
                     }
                 }
             }
-            Log.d(TAG, "    ARP file: " + count + " líneas, " + arp.size() + " entradas");
-        } catch (Exception e) {
-            Log.v(TAG, "    ARP file FAIL: " + path + " → " + e.getClass().getSimpleName());
-        }
+        } catch (Exception ignored) {}
         return arp;
     }
 
@@ -680,35 +538,18 @@ public class NetworkScanner {
         Map<String, String> arp = new HashMap<>();
         try {
             Process p = Runtime.getRuntime().exec(command);
-            BufferedReader br = new BufferedReader(
-                    new InputStreamReader(p.getInputStream()));
+            BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
             String line;
-            int raw = 0;
             while ((line = br.readLine()) != null) {
-                raw++;
-                Log.v(TAG, "    shell[" + command + "] line " + raw + ": \"" + line + "\"");
                 String parsed = parseArpLine(line);
                 if (parsed != null) {
                     String[] kv = parsed.split("\t");
                     arp.put(kv[0], kv[1]);
                 }
             }
-            BufferedReader err = new BufferedReader(
-                    new InputStreamReader(p.getErrorStream()));
-            StringBuilder errBuf = new StringBuilder();
-            String errLine;
-            while ((errLine = err.readLine()) != null) {
-                errBuf.append(errLine).append("\n");
-            }
-            if (errBuf.length() > 0) {
-                Log.w(TAG, "    shell stderr [" + command + "]: " + errBuf.toString().trim());
-            }
-            int exitCode = p.waitFor();
-            Log.v(TAG, "    shell exit [" + command + "]: " + exitCode + ", parsed=" + arp.size());
             br.close();
-        } catch (Exception e) {
-            Log.v(TAG, "    shell FAIL [" + command + "]: " + e.getClass().getSimpleName());
-        }
+            p.waitFor();
+        } catch (Exception ignored) {}
         return arp;
     }
 
@@ -751,7 +592,6 @@ public class NetworkScanner {
             if (ip != null && mac != null && !"00:00:00:00:00:00".equals(mac))
                 return ip + "\t" + mac.toUpperCase();
         }
-
         return null;
     }
 
@@ -761,22 +601,12 @@ public class NetworkScanner {
         try {
             WifiManager wifi = (WifiManager)
                     context.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
-            if (wifi == null) {
-                Log.w(TAG, "WifiManager es null, usando fallback");
-                return fallbackSubnet();
-            }
+            if (wifi == null) return fallbackSubnet();
             WifiInfo info = wifi.getConnectionInfo();
             int ip = info.getIpAddress();
-            Log.d(TAG, "WifiInfo.getIpAddress() = " + ip + " (raw int)");
-            if (ip == 0) {
-                Log.w(TAG, "IP es 0 (¿WiFi conectado?), usando fallback");
-                return fallbackSubnet();
-            }
-            String subnet = String.format("%d.%d.%d.", (ip & 0xff), (ip >> 8 & 0xff), (ip >> 16 & 0xff));
-            Log.i(TAG, "📡 IP local: " + subnet.substring(0, subnet.length() - 1));
-            return subnet;
+            if (ip == 0) return fallbackSubnet();
+            return String.format("%d.%d.%d.", (ip & 0xff), (ip >> 8 & 0xff), (ip >> 16 & 0xff));
         } catch (Exception e) {
-            Log.e(TAG, "Error detectando subred: " + e.getMessage());
             return fallbackSubnet();
         }
     }
@@ -789,19 +619,13 @@ public class NetworkScanner {
                 android.net.DhcpInfo dhcp = wifi.getDhcpInfo();
                 if (dhcp != null && dhcp.gateway != 0) {
                     int gw = dhcp.gateway;
-                    String gwStr = String.format("%d.%d.%d.%d",
+                    return String.format("%d.%d.%d.%d",
                             (gw & 0xff), (gw >> 8 & 0xff),
                             (gw >> 16 & 0xff), (gw >> 24 & 0xff));
-                    Log.i(TAG, "🚪 Gateway DHCP: " + gwStr);
-                    return gwStr;
                 }
             }
-        } catch (Exception ignored) {
-            Log.w(TAG, "Error detectando gateway: " + ignored.getMessage());
-        }
-        String fallbackGw = detectSubnet(context) + "1";
-        Log.w(TAG, "Usando gateway por defecto: " + fallbackGw);
-        return fallbackGw;
+        } catch (Exception ignored) {}
+        return detectSubnet(context) + "1";
     }
 
     private String fallbackSubnet() { return "192.168.1."; }

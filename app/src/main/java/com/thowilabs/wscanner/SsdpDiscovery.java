@@ -20,7 +20,8 @@ import java.util.Map;
  * escucha respuestas HTTP/1.1 200 OK durante 4 segundos,
  * y extrae nombres de dispositivo desde headers SERVER y LOCATION.
  *
- * Paso opcional: GET al XML de LOCATION y extrae <friendlyName>.
+ * Usa sistema de scoring para elegir el mejor nombre cuando
+ * una IP responde con múltiples identidades (ej: TV + Chromecast).
  */
 public class SsdpDiscovery {
 
@@ -40,10 +41,11 @@ public class SsdpDiscovery {
     /**
      * Descubre dispositivos UPnP en la red local.
      *
-     * @return Map IP → nombre amigable (friendlyName o SERVER header)
+     * @return Map IP → nombre amigable
      */
     public static Map<String, String> discover() {
-        Map<String, String> results = new HashMap<>();
+        Map<String, String> bestNames = new HashMap<>();
+        Map<String, Integer> bestScores = new HashMap<>();
         long t0 = System.currentTimeMillis();
 
         Log.i(TAG, "═══════════════════════════════════════");
@@ -56,14 +58,12 @@ public class SsdpDiscovery {
             socket.setSoTimeout(TIMEOUT_MS);
             socket.bind(new InetSocketAddress(0));
 
-            // Enviar M-SEARCH
             byte[] queryBytes = MSEARCH.getBytes("UTF-8");
             DatagramPacket queryPacket = new DatagramPacket(queryBytes, queryBytes.length,
                     InetAddress.getByName(SSDP_ADDR), SSDP_PORT);
             socket.send(queryPacket);
             Log.d(TAG, "M-SEARCH enviado a " + SSDP_ADDR + ":" + SSDP_PORT);
 
-            // Recibir respuestas
             int responseCount = 0;
             byte[] buf = new byte[2048];
             long deadline = System.currentTimeMillis() + TIMEOUT_MS;
@@ -83,57 +83,55 @@ public class SsdpDiscovery {
 
                     if (response.startsWith("HTTP/1.1 200 OK")) {
                         responseCount++;
-                        Log.v(TAG, "Respuesta SSDP de " + remoteIp);
 
-                        // Extraer headers
                         String server = extractHeader(response, "SERVER");
                         String location = extractHeader(response, "LOCATION");
                         String usn = extractHeader(response, "USN");
 
-                        Log.v(TAG, "  SERVER: " + server);
-                        Log.v(TAG, "  LOCATION: " + location);
-                        Log.v(TAG, "  USN: " + usn);
-
-                        // Construir el nombre — prioridad: USN > SERVER > XML friendlyName
-                        String deviceName = null;
+                        // Evaluar todas las fuentes y elegir la de mayor puntuación
+                        String candidate = null;
+                        int candidateScore = 0;
 
                         // 1. USN: contiene la info más rica (marca, modelo)
                         if (usn != null && !usn.isEmpty()) {
-                            deviceName = cleanUsn(usn);
-                            if (deviceName != null) Log.i(TAG, "  🏷️  USN → " + deviceName);
+                            UsnResult r = parseUsn(usn);
+                            if (r != null && r.score > candidateScore) {
+                                candidate = r.name;
+                                candidateScore = r.score;
+                            }
                         }
 
                         // 2. SERVER header
-                        if (deviceName == null && server != null && !server.isEmpty()) {
-                            deviceName = cleanServerName(server);
-                            if (deviceName != null) Log.i(TAG, "  🏷️  SERVER → " + deviceName);
-                        }
-
-                        // 3. XML friendlyName (último recurso: hace HTTP request al XML)
-                        if (deviceName == null && location != null && !location.isEmpty()) {
-                            String friendlyName = fetchFriendlyName(location, remoteIp);
-                            if (friendlyName != null && !friendlyName.isEmpty()) {
-                                deviceName = friendlyName;
-                                Log.i(TAG, "  🏷️  friendlyName → " + deviceName);
+                        if (server != null && !server.isEmpty()) {
+                            ServerResult r = parseServer(server);
+                            if (r != null && r.score > candidateScore) {
+                                candidate = r.name;
+                                candidateScore = r.score;
                             }
                         }
 
-                        // 3. XML friendlyName
-                        if (deviceName == null && location != null && !location.isEmpty()) {
-                            String friendlyName = fetchFriendlyName(location, remoteIp);
+                        // 3. XML friendlyName (solo si no tenemos buen nombre aún)
+                        if (candidateScore < 5 && location != null && !location.isEmpty()) {
+                            String friendlyName = fetchFriendlyName(location);
                             if (friendlyName != null && !friendlyName.isEmpty()) {
-                                deviceName = friendlyName;
-                                Log.i(TAG, "  🏷️  friendlyName → " + deviceName);
+                                int fnScore = scoreFriendlyName(friendlyName);
+                                if (fnScore > candidateScore) {
+                                    candidate = friendlyName;
+                                    candidateScore = fnScore;
+                                }
                             }
                         }
 
-                        if (deviceName != null && !deviceName.isEmpty()) {
-                            results.put(remoteIp, deviceName);
+                        if (candidate != null && candidateScore > 0) {
+                            int currentBest = bestScores.getOrDefault(remoteIp, 0);
+                            if (candidateScore > currentBest) {
+                                bestNames.put(remoteIp, candidate);
+                                bestScores.put(remoteIp, candidateScore);
+                                Log.i(TAG, "  🏷️  " + remoteIp + " → \"" + candidate + "\" (score=" + candidateScore + ")");
+                            }
                         }
                     }
-
                 } catch (java.net.SocketTimeoutException e) {
-                    Log.v(TAG, "Timeout SSDP (esperado)");
                     break;
                 }
             }
@@ -149,23 +147,170 @@ public class SsdpDiscovery {
         }
 
         long elapsed = System.currentTimeMillis() - t0;
-        Log.i(TAG, "✅ SSDP completado en " + elapsed + " ms — " + results.size() + " dispositivos");
+        Log.i(TAG, "✅ SSDP completado en " + elapsed + " ms — " + bestNames.size() + " dispositivos");
         Log.i(TAG, "═══════════════════════════════════════");
-        return results;
+        return bestNames;
+    }
+
+    // ═══════════════════════ Scoring system ════════════════════════
+
+    /**
+     * Puntuación para nombres extraídos del USN.
+     * Prioridad: marca conocida > tipo UPnP conocido > router/gateway > otros.
+     */
+    private static UsnResult parseUsn(String usn) {
+        // 1. Marca conocida en el UUID → score alto
+        String[] knownBrands = {"HISENSE", "SAMSUNG", "LG", "SONY", "PHILIPS",
+                "PANASONIC", "SHARP", "TCL", "TOSHIBA", "VIZIO", "SKYWORTH"};
+        for (String brand : knownBrands) {
+            String upper = usn.toUpperCase();
+            int bIdx = upper.indexOf(brand);
+            if (bIdx >= 0) {
+                String rest = usn.substring(bIdx);
+                int endIdx = rest.indexOf("::");
+                if (endIdx < 0) endIdx = rest.length();
+                rest = rest.substring(0, endIdx);
+
+                rest = rest.replace("SMARTTV=", "Smart TV ")
+                        .replace("KANDROIDTV-", "")
+                        .replace("NFANDROID2-PRV-MTK96124", "")
+                        .replace("-", " ")
+                        .replace("=", " ")
+                        .replaceAll("\\d{5,}", "");
+                rest = rest.trim().replaceAll("\\s+", " ");
+                if (rest.length() > 2 && rest.length() < 60) {
+                    return new UsnResult(rest, 10);
+                }
+            }
+        }
+
+        // 2. Tipo UPnP estándar
+        int colon = usn.indexOf("::");
+        if (colon > 0) {
+            String deviceType = usn.substring(colon + 2);
+            if (deviceType.contains("InternetGatewayDevice"))
+                return new UsnResult("Router/Gateway", 8);
+            if (deviceType.contains("WANDevice") || deviceType.contains("WANConnectionDevice"))
+                return new UsnResult("Router (WAN)", 7);
+            if (deviceType.contains("MediaRenderer"))
+                return new UsnResult("Media Renderer", 6);
+            if (deviceType.contains("MediaServer"))
+                return new UsnResult("Media Server", 6);
+            if (deviceType.contains("WLANAccessPoint"))
+                return new UsnResult("Access Point", 6);
+            if (deviceType.contains("Printer"))
+                return new UsnResult("Impresora", 6);
+            if (deviceType.contains("dial-multiscreen"))
+                return new UsnResult("Cast Receiver", 8);
+        }
+
+        return null;
+    }
+
+    /**
+     * Puntuación para nombres extraídos del header SERVER.
+     * Chromecast > marcas conocidas > otros servicios > genérico.
+     */
+    private static ServerResult parseServer(String server) {
+        if (server == null || server.isEmpty()) return null;
+
+        String upper = server.toUpperCase();
+
+        // Chromecast → muy específico, score alto
+        if (upper.contains("CHROMECAST"))
+            return new ServerResult("Chromecast", 8);
+
+        // Marcas/servicios específicos
+        if (upper.contains("MINIDLNA")) return new ServerResult("MiniDLNA", 7);
+        if (upper.contains("PLEX")) return new ServerResult("Plex Server", 7);
+
+        // Buscar marcas conocidas en cualquier parte del string
+        for (String part : server.split("\\s+")) {
+            String lower = part.toLowerCase();
+            if (lower.contains("samsung") || lower.contains("lg")
+                    || lower.contains("sony") || lower.contains("xbox")
+                    || lower.contains("playstation") || lower.contains("roku")
+                    || lower.contains("plex") || lower.contains("minidlna")
+                    || lower.contains("ready") || lower.contains("synology")
+                    || lower.contains("qnap") || lower.contains("buffalo")) {
+                return new ServerResult(part, 7);
+            }
+        }
+
+        // Buscar parte significativa antes de "UPnP"
+        int upnpIdx = server.indexOf("UPnP");
+        if (upnpIdx > 0) {
+            String before = server.substring(0, upnpIdx).trim();
+            int comma = before.indexOf(",");
+            if (comma > 0) before = before.substring(0, comma).trim();
+            if (before.endsWith("/")) before = before.substring(0, before.length() - 1).trim();
+
+            // Rechazar kernels de Linux y strings genéricos
+            if (!isGenericServer(before)) {
+                return new ServerResult(before, 4);
+            }
+        }
+
+        // Buscar token significativo (no genérico, no versión de kernel)
+        String[] tokens = server.split("[\\s/,]");
+        for (String token : tokens) {
+            token = token.trim();
+            if (token.length() >= 4 && !isGenericToken(token)) {
+                return new ServerResult(token, 3);
+            }
+        }
+
+        return null;
+    }
+
+    /** Rechaza strings que son versiones de kernel, genéricos o sin valor. */
+    private static boolean isGenericServer(String s) {
+        if (s == null || s.isEmpty()) return true;
+        String lower = s.toLowerCase();
+
+        // Versión de kernel: "4.19.116+", "3.10.0", "Linux/5.4"
+        if (lower.matches(".*\\d+\\.\\d+\\.\\d+[+]?.*")) return true;
+        // Genéricos
+        if (lower.equals("linux") || lower.startsWith("linux/")) return true;
+        if (lower.equals("posix")) return true;
+        if (lower.startsWith("portable")) return true;
+        if (lower.startsWith("sdk")) return true;
+        if (lower.equals("upnp")) return true;
+        if (lower.equals("http")) return true;
+        if (lower.length() < 4) return true;
+        // "Platform 1.0" genérico de DLNA
+        if (lower.startsWith("platform")) return true;
+
+        return false;
+    }
+
+    private static boolean isGenericToken(String token) {
+        String upper = token.toUpperCase();
+        return upper.equals("UPNP") || upper.equals("HTTP") || upper.equals("LINUX")
+                || upper.equals("POSIX") || upper.equals("PORTABLE") || upper.equals("SDK")
+                || upper.equals("FOR") || upper.equals("DEVICES") || upper.equals("DLNADOC")
+                || upper.startsWith("1.") || upper.startsWith("2.") || upper.startsWith("3.")
+                || upper.startsWith("4.") || upper.startsWith("5.")
+                || upper.startsWith("PLATFORM") || upper.startsWith("HIS/");
+    }
+
+    private static int scoreFriendlyName(String name) {
+        if (name == null) return 0;
+        String upper = name.toUpperCase();
+        // friendlyName "UPNP IGD" es mejor que nada
+        if (upper.contains("IGD") || upper.contains("GATEWAY") || upper.contains("ROUTER"))
+            return 6;
+        // Chromecast/Living Room TV/etc
+        if (upper.contains("CHROMECAST") || upper.contains("TV") || upper.contains("LIVING"))
+            return 7;
+        return 5;
     }
 
     // ═══════════════════════ XML Friendly Name ═══════════════════
 
-    /**
-     * Hace GET al XML de LOCATION y extrae <friendlyName>.
-     * Timeout corto: 1500 ms.
-     */
-    private static String fetchFriendlyName(String locationUrl, String fallbackIp) {
+    private static String fetchFriendlyName(String locationUrl) {
         try {
-            // Si la URL usa un hostname, intentar resolverlo
             URL url = new URL(locationUrl);
-            String host = url.getHost();
-
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setConnectTimeout(1500);
             conn.setReadTimeout(1500);
@@ -190,13 +335,10 @@ public class SsdpDiscovery {
 
             String xmlStr = xml.toString();
 
-            // Extraer <friendlyName>...</friendlyName>
             String friendlyName = extractTag(xmlStr, "friendlyName");
             if (friendlyName != null) return friendlyName;
 
-            // Extraer <manufacturer>...</manufacturer>
             String manufacturer = extractTag(xmlStr, "manufacturer");
-            // Extraer <modelName>...</modelName>
             String modelName = extractTag(xmlStr, "modelName");
 
             if (manufacturer != null && modelName != null) {
@@ -206,7 +348,6 @@ public class SsdpDiscovery {
             if (modelName != null) return modelName;
 
             return null;
-
         } catch (Exception e) {
             Log.v(TAG, "Error fetching XML from " + locationUrl + ": " + e.getMessage());
             return null;
@@ -214,7 +355,6 @@ public class SsdpDiscovery {
     }
 
     private static String extractTag(String xml, String tag) {
-        // Buscar <tagName>contenido</tagName>
         String openTag = "<" + tag + ">";
         String closeTag = "</" + tag + ">";
         int start = xml.indexOf(openTag);
@@ -222,7 +362,6 @@ public class SsdpDiscovery {
             openTag = "<" + tag + " ";
             start = xml.indexOf(openTag);
             if (start >= 0) {
-                // Tag con atributos: <tag attr="val">
                 int gt = xml.indexOf(">", start);
                 if (gt < 0) return null;
                 start = gt + 1;
@@ -238,7 +377,7 @@ public class SsdpDiscovery {
         return xml.substring(start, end).trim();
     }
 
-    // ═══════════════════════ Header & Name Helpers ═══════════════
+    // ═══════════════════════ HTTP Header Parser ═══════════════════
 
     private static String extractHeader(String http, String headerName) {
         String search = headerName + ":";
@@ -248,125 +387,23 @@ public class SsdpDiscovery {
             idx = http.indexOf(search);
         }
         if (idx < 0) return null;
-
         int start = idx + search.length();
         int end = http.indexOf("\r\n", start);
         if (end < 0) end = http.length();
         return http.substring(start, end).trim();
     }
 
-    /**
-     * Extrae nombre significativo del USN.
-     * Ej: "uuid:NFANDROID2-PRV-MTK96124KANDROIDTV-HISENSMARTTV=4K-...::upnp:rootdevice" 
-     *     → extrae "HISENSMARTTV=4K" → "Hisense Smart TV 4K"
-     * Ej: "uuid:20809696-...::urn:schemas-upnp-org:device:InternetGatewayDevice:1"
-     *     → "Router/Gateway"
-     */
-    private static String cleanUsn(String usn) {
-        if (usn == null || usn.isEmpty()) return null;
+    // ═══════════════════════ Result holders ═══════════════════════
 
-        // 1. Buscar patrones de fabricante+modelo en el UUID (formato NFANDROID2-...)
-        //    Ej: KANDROIDTV-HISENSMARTTV=4K
-        String[] knownBrands = {"HISENSE", "SAMSUNG", "LG", "SONY", "PHILIPS",
-                "PANASONIC", "SHARP", "TCL", "TOSHIBA", "VIZIO", "SKYWORTH"};
-        for (String brand : knownBrands) {
-            String upper = usn.toUpperCase();
-            int brandIdx = upper.indexOf(brand);
-            if (brandIdx >= 0) {
-                // Extraer desde la marca hasta el próximo '=' o ':' o fin del UUID
-                String rest = usn.substring(brandIdx);
-                // Limpiar: tomar hasta el "::" o hasta el final del UUID
-                int endIdx = rest.indexOf("::");
-                if (endIdx < 0) endIdx = rest.length();
-                rest = rest.substring(0, endIdx);
-
-                // Expandir: "SMARTTV=4K" → "Smart TV 4K"
-                rest = rest.replace("SMARTTV=", "Smart TV ")
-                        .replace("KANDROIDTV-", "")
-                        .replace("NFANDROID2-PRV-MTK96124", "")
-                        .replace("-", " ")
-                        .replace("=", " ")
-                        .replaceAll("\\d{5,}", ""); // eliminar seriales largos
-                rest = rest.trim().replaceAll("\\s+", " ");
-                if (rest.length() > 2 && rest.length() < 60) {
-                    return rest;
-                }
-            }
-        }
-
-        // 2. Buscar tipo de dispositivo UPnP estándar
-        int colon = usn.indexOf("::");
-        if (colon > 0) {
-            String deviceType = usn.substring(colon + 2);
-            if (deviceType.contains("InternetGatewayDevice")) return "Router/Gateway";
-            if (deviceType.contains("WANDevice") || deviceType.contains("WANConnectionDevice"))
-                return "Router (WAN)";
-            if (deviceType.contains("MediaRenderer")) return "Media Renderer";
-            if (deviceType.contains("MediaServer")) return "Media Server";
-            if (deviceType.contains("WLANAccessPoint")) return "Access Point";
-            if (deviceType.contains("Printer")) return "Impresora";
-            if (deviceType.contains("Scanner")) return "Escáner";
-            if (deviceType.contains("Camera")) return "Cámara IP";
-            if (deviceType.contains("DimmableLight")) return "Luz inteligente";
-            // Chromecast
-            if (deviceType.contains("dial-multiscreen")) return "Cast Receiver";
-        }
-
-        return null;
+    private static class UsnResult {
+        final String name;
+        final int score;
+        UsnResult(String name, int score) { this.name = name; this.score = score; }
     }
 
-    /**
-     * Limpia el header SERVER para extraer un nombre utilizable.
-     */
-    private static String cleanServerName(String server) {
-        if (server == null || server.isEmpty()) return null;
-
-        // Patrones muy reconocibles
-        if (server.toUpperCase().contains("CHROMECAST")) return "Chromecast";
-        if (server.toUpperCase().contains("MINIDLNA")) return "MiniDLNA";
-        if (server.toUpperCase().contains("PLEX")) return "Plex Server";
-
-        // Buscar marcas conocidas
-        for (String part : server.split("\\s+")) {
-            String lower = part.toLowerCase();
-            if (lower.contains("samsung") || lower.contains("lg")
-                    || lower.contains("sony") || lower.contains("xbox")
-                    || lower.contains("playstation") || lower.contains("roku")
-                    || lower.contains("plex") || lower.contains("minidlna")
-                    || lower.contains("ready") || lower.contains("synology")
-                    || lower.contains("qnap") || lower.contains("buffalo")) {
-                return part;
-            }
-        }
-
-        // Si tiene "UPnP", devolver la parte antes (hasta la coma)
-        int upnpIdx = server.indexOf("UPnP");
-        if (upnpIdx > 0) {
-            String before = server.substring(0, upnpIdx).trim();
-            // Cortar en la coma si hay
-            int comma = before.indexOf(",");
-            if (comma > 0) before = before.substring(0, comma).trim();
-            if (before.endsWith("/")) before = before.substring(0, before.length() - 1).trim();
-            // Si empieza con "Linux" o similar genérico, no es útil
-            if (!before.isEmpty() && !before.equalsIgnoreCase("Linux")
-                    && !before.startsWith("Linux/") && !before.startsWith("POSIX")) {
-                return before;
-            }
-        }
-
-        // Último recurso: tomar la primera palabra significativa
-        String[] tokens = server.split("[\\s/,]");
-        for (String token : tokens) {
-            token = token.trim();
-            if (token.length() >= 3 && !token.equals("UPnP") && !token.equals("HTTP")
-                    && !token.startsWith("1.") && !token.startsWith("2.")
-                    && !token.equalsIgnoreCase("Linux") && !token.equalsIgnoreCase("POSIX")
-                    && !token.equalsIgnoreCase("Portable") && !token.equalsIgnoreCase("SDK")
-                    && !token.equalsIgnoreCase("for") && !token.equalsIgnoreCase("devices")) {
-                return token;
-            }
-        }
-
-        return null;
+    private static class ServerResult {
+        final String name;
+        final int score;
+        ServerResult(String name, int score) { this.name = name; this.score = score; }
     }
 }

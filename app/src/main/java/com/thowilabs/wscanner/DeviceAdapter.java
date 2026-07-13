@@ -3,14 +3,17 @@ package com.thowilabs.wscanner;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
-import android.graphics.Typeface;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.recyclerview.widget.RecyclerView;
+
+import com.mikepenz.iconics.IconicsDrawable;
 
 import java.util.List;
 
@@ -24,55 +27,131 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.Holder> {
 
     @Override
     public Holder onCreateViewHolder(ViewGroup parent, int viewType) {
-        LinearLayout card = new LinearLayout(parent.getContext());
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(40, 24, 40, 24);
+        Context ctx = parent.getContext();
+
+        // Card container
+        LinearLayout card = new LinearLayout(ctx);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setPadding(16, 16, 16, 16);
+
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.setMargins(0, 0, 0, 12);
+        params.setMargins(0, 0, 0, 10);
         card.setLayoutParams(params);
-        card.setBackgroundColor(0xFFF5F5F5);
+        card.setBackground(createCardBackground(ctx));
         card.setElevation(2f);
 
-        TextView txtName = new TextView(parent.getContext());
-        txtName.setTextSize(16);
-        txtName.setTypeface(null, Typeface.BOLD);
-        txtName.setTextColor(0xFF1A1A1A);
+        // ── Contenedor del ícono con badge de estado ──
+        android.widget.FrameLayout iconContainer = new android.widget.FrameLayout(ctx);
+        LinearLayout.LayoutParams iconCtrParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        iconCtrParams.setMargins(0, 0, 14, 0);
+        iconContainer.setLayoutParams(iconCtrParams);
 
-        TextView txtIp = new TextView(parent.getContext());
-        txtIp.setTextSize(13);
-        txtIp.setTextColor(0xFF666666);
-        txtIp.setPadding(0, 4, 0, 0);
+        // Icono (ImageView + IconicsDrawable)
+        ImageView iconView = new ImageView(ctx);
+        iconView.setLayoutParams(new android.widget.FrameLayout.LayoutParams(
+                dp(44, ctx), dp(44, ctx)));
+        iconView.setPadding(dp(6, ctx), dp(6, ctx), dp(6, ctx), dp(6, ctx));
 
-        TextView txtVendor = new TextView(parent.getContext());
-        txtVendor.setTextSize(12);
-        txtVendor.setTextColor(0xFF999999);
-        txtVendor.setPadding(0, 2, 0, 0);
+        // Puntito verde superpuesto en esquina inferior derecha
+        TextView badge = new TextView(ctx);
+        badge.setText("●");
+        badge.setTextColor(0xFF3FB950);
+        badge.setTextSize(12);
+        badge.setGravity(Gravity.CENTER);
+        android.widget.FrameLayout.LayoutParams badgeParams =
+                new android.widget.FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT);
+        badgeParams.gravity = Gravity.BOTTOM | Gravity.END;
+        badgeParams.setMargins(0, 0, dp(2, ctx), dp(2, ctx));
+        badge.setLayoutParams(badgeParams);
 
-        TextView txtMethod = new TextView(parent.getContext());
-        txtMethod.setTextSize(11);
-        txtMethod.setTextColor(0xFF66BB6A);
+        iconContainer.addView(iconView);
+        iconContainer.addView(badge);
+
+        // ── Columna de texto ──
+        LinearLayout rightCol = new LinearLayout(ctx);
+        rightCol.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams rightParams = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        rightCol.setLayoutParams(rightParams);
+
+        TextView txtName = new TextView(ctx);
+        txtName.setTextSize(14);
+        txtName.setTextColor(0xFFE6EDF3);
+        txtName.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        txtName.setPadding(0, 0, 0, 4);
+
+        TextView txtIp = new TextView(ctx);
+        txtIp.setTextSize(12);
+        txtIp.setTextColor(0xFF00E5FF);
+        txtIp.setTypeface(android.graphics.Typeface.MONOSPACE);
+        txtIp.setPadding(0, 0, 0, 2);
+
+        TextView txtVendor = new TextView(ctx);
+        txtVendor.setTextSize(11);
+        txtVendor.setTextColor(0xFF8B949E);
+        txtVendor.setPadding(0, 0, 0, 2);
+
+        TextView txtMethod = new TextView(ctx);
+        txtMethod.setTextSize(10);
+        txtMethod.setTextColor(0xFF3FB950);
         txtMethod.setPadding(0, 2, 0, 0);
 
-        card.addView(txtName);
-        card.addView(txtIp);
-        card.addView(txtVendor);
-        card.addView(txtMethod);
+        rightCol.addView(txtName);
+        rightCol.addView(txtIp);
+        rightCol.addView(txtVendor);
+        rightCol.addView(txtMethod);
 
-        return new Holder(card, txtName, txtIp, txtVendor, txtMethod);
+        // ── Badge de tipo ──
+        LinearLayout typeCol = new LinearLayout(ctx);
+        typeCol.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams typeParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.MATCH_PARENT);
+        typeParams.setMarginStart(8);
+        typeCol.setLayoutParams(typeParams);
+
+        TextView txtType = new TextView(ctx);
+        txtType.setTextSize(10);
+        txtType.setTextColor(0xFF00E5FF);
+        txtType.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        txtType.setPadding(10, 4, 10, 4);
+        txtType.setBackgroundColor(0x1A00E5FF);
+
+        typeCol.addView(txtType);
+
+        card.addView(iconContainer);
+        card.addView(rightCol);
+        card.addView(typeCol);
+
+        return new Holder(card, iconView, txtName, txtIp, txtVendor, txtMethod, txtType);
     }
 
     @Override
     public void onBindViewHolder(Holder h, int i) {
         Device d = items.get(i);
+        Context ctx = h.itemView.getContext();
 
-        h.txtName.setText(deviceIcon(d) + " " + d.name);
+        // Icono profesional via IconicsDrawable
+        int sizePx = dp(32, ctx);
+        IconicsDrawable drawable = new IconicsDrawable(ctx, deviceIconName(d));
+        drawable.setColorList(android.content.res.ColorStateList.valueOf(0xFF00E5FF));
+        drawable.setSizeXPx(sizePx);
+        drawable.setSizeYPx(sizePx);
+        h.iconView.setImageDrawable(drawable);
+
+        h.txtName.setText(d.name);
         h.txtIp.setText(d.ip);
 
+        // Vendor / MAC
         String info = "";
         if (d.mac != null && !d.mac.equals("N/A")) {
-            info = "MAC: " + d.mac;
+            info = "MAC " + d.mac;
         }
         if (d.vendor != null && !d.vendor.equals("Desconocido") && !d.vendor.equals(d.name)) {
             info += (info.isEmpty() ? "" : "  ·  ") + d.vendor;
@@ -80,28 +159,31 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.Holder> {
         h.txtVendor.setText(info);
         h.txtVendor.setVisibility(info.isEmpty() ? View.GONE : View.VISIBLE);
 
+        // Método de descubrimiento
+        String method = d.discoveryMethod;
+        if (method != null && !method.equals("Heurística")) {
+            h.txtMethod.setText("vía " + methodLabel(method));
+            h.txtMethod.setVisibility(View.VISIBLE);
+        } else {
+            h.txtMethod.setVisibility(View.GONE);
+        }
+
+        // Type badge
+        if (d.discoveryMethod != null && !d.discoveryMethod.equals("Heurística")) {
+            h.txtType.setText(shortLabel(d.discoveryMethod));
+            h.txtType.setVisibility(View.VISIBLE);
+        } else {
+            h.txtType.setVisibility(View.GONE);
+        }
+
         // Tap to copy IP
         h.itemView.setOnClickListener(v -> {
             ClipboardManager clipboard = (ClipboardManager)
                     v.getContext().getSystemService(Context.CLIPBOARD_SERVICE);
             ClipData clip = ClipData.newPlainText("IP", d.ip);
             clipboard.setPrimaryClip(clip);
-            Toast.makeText(v.getContext(), "📋 " + d.ip + " copiado", Toast.LENGTH_SHORT).show();
+            Toast.makeText(v.getContext(), d.ip + " copiado", Toast.LENGTH_SHORT).show();
         });
-        // Mostrar método de descubrimiento (solo si no es heurística)
-        String method = d.discoveryMethod;
-        if (method != null && !method.equals("Heurística")) {
-            String label = methodLabel(method);
-            String detail = d.discoveryDetail;
-            if (detail != null && !detail.isEmpty() && detail.length() < 40) {
-                h.txtMethod.setText("vía " + label + " · " + detail);
-            } else {
-                h.txtMethod.setText("vía " + label);
-            }
-            h.txtMethod.setVisibility(View.VISIBLE);
-        } else {
-            h.txtMethod.setVisibility(View.GONE);
-        }
     }
 
     @Override
@@ -109,9 +191,53 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.Holder> {
         return items.size();
     }
 
-    /**
-     * Traduce el código de método a una etiqueta legible.
-     */
+    // ── Icono por tipo de dispositivo (string names para compatibilidad) ──
+
+    private String deviceIconName(Device d) {
+        String v = (d.vendor != null) ? d.vendor.toLowerCase() : "";
+        String n = d.name.toLowerCase();
+        String combined = v + " " + n;
+
+        if (combined.contains("router") || combined.contains("gateway") || combined.contains("cisco")
+                || combined.contains("tp-link") || combined.contains("d-link") || combined.contains("netgear")
+                || combined.contains("mikrotik") || combined.contains("ubiquiti") || combined.contains("huawei")
+                || combined.contains("zte") || combined.contains("fiberhome"))
+            return "cmd_router_network";
+        if (combined.contains("samsung") || combined.contains("apple") || combined.contains("iphone")
+                || combined.contains("xiaomi") || combined.contains("oneplus") || combined.contains("google")
+                || combined.contains("motorola") || combined.contains("nokia") || combined.contains("sony")
+                || combined.contains("oppo") || combined.contains("vivo"))
+            return "cmd_cellphone";
+        if (combined.contains("tv") || combined.contains("television") || combined.contains("roku")
+                || combined.contains("chromecast") || combined.contains("hisense") || combined.contains("tcl")
+                || combined.contains("philips") || combined.contains("cast receiver"))
+            return "cmd_television";
+        if (combined.contains("printer") || combined.contains("brother") || combined.contains("epson")
+                || combined.contains("canon") || combined.contains("xerox") || combined.contains("hewlett"))
+            return "cmd_printer";
+        if (combined.contains("camera") || combined.contains("nest") || combined.contains("ring")
+                || combined.contains("arlo") || combined.contains("hikvision") || combined.contains("dahua"))
+            return "cmd_camera";
+        if (combined.contains("alexa") || combined.contains("echo") || combined.contains("speaker")
+                || combined.contains("sonos") || combined.contains("jbl"))
+            return "cmd_speaker";
+        if (combined.contains("playstation") || combined.contains("xbox") || combined.contains("nintendo"))
+            return "cmd_gamepad_variant";
+        if (combined.contains("servidor") || combined.contains("server") || combined.contains("nas")
+                || combined.contains("synology") || combined.contains("qnap")
+                || combined.contains("web") || combined.contains("linux"))
+            return "cmd_server";
+        if (combined.contains("raspberry") || combined.contains("arduino") || combined.contains("esp")
+                || combined.contains("mqtt") || combined.contains("iot"))
+            return "cmd_chip";
+        if (combined.contains("tablet") || combined.contains("ipad"))
+            return "cmd_tablet_android";
+
+        return "cmd_laptop";
+    }
+
+    // ── Labels ──────────────────────────────────────────────────────
+
     private String methodLabel(String method) {
         switch (method) {
             case "mDNS":     return "Bonjour (mDNS)";
@@ -119,63 +245,58 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.Holder> {
             case "NetBIOS":  return "NetBIOS";
             case "DNS":      return "DNS inverso";
             case "HTTP":     return "HTTP banner";
-            case "OUI DB":   return "Base OUI (MAC)";
+            case "OUI DB":   return "OUI (MAC)";
             default:         return method;
         }
     }
 
-    private String deviceIcon(Device d) {
-        String v = (d.vendor != null) ? d.vendor.toLowerCase() : "";
-        if (v.contains("router") || v.contains("gateway") || v.contains("cisco")
-                || v.contains("tp-link") || v.contains("d-link") || v.contains("netgear")
-                || v.contains("mikrotik") || v.contains("ubiquiti") || v.contains("huawei")
-                || v.contains("zte") || v.contains("fiberhome"))
-            return "\uD83D\uDDD8";
-        if (v.contains("samsung") || v.contains("apple") || v.contains("iphone")
-                || v.contains("xiaomi") || v.contains("oneplus") || v.contains("google")
-                || v.contains("motorola") || v.contains("nokia") || v.contains("sony")
-                || v.contains("oppo") || v.contains("vivo"))
-            return "\uD83D\uDCF1";
-        if (v.contains("tv") || v.contains("television") || v.contains("roku")
-                || v.contains("chromecast") || v.contains("hisense") || v.contains("tcl")
-                || v.contains("philips"))
-            return "\uD83D\uDCFA";
-        if (v.contains("dell") || v.contains("lenovo")
-                || v.contains("acer") || v.contains("asus")
-                || v.contains("msi") || v.contains("intel") || v.contains("gigabyte")
-                || v.contains("realtek") || v.contains("broadcom"))
-            return "\uD83D\uDCBB";
-        if (v.contains("printer") || v.contains("brother") || v.contains("epson")
-                || v.contains("canon") || v.contains("xerox") || v.contains("hewlett"))
-            return "\uD83D\uDDA8";
-        if (v.contains("camera") || v.contains("nest") || v.contains("ring")
-                || v.contains("arlo") || v.contains("hikvision") || v.contains("dahua"))
-            return "\uD83D\uDCF7";
-        if (v.contains("alexa") || v.contains("echo") || v.contains("speaker")
-                || v.contains("sonos") || v.contains("jbl"))
-            return "\uD83D\uDD0A";
-        if (v.contains("playstation") || v.contains("xbox") || v.contains("nintendo"))
-            return "\uD83C\uDFAE";
-        if (v.contains("kindle"))
-            return "\uD83D\uDCD6";
-        if (v.contains("raspberry") || v.contains("arduino") || v.contains("esp"))
-            return "\uD83E\uDD16";
-        return "\uD83D\uDCBB";
+    private String shortLabel(String method) {
+        switch (method) {
+            case "SSDP":     return "UPnP";
+            case "mDNS":     return "MDNS";
+            case "NetBIOS":  return "NETB";
+            case "OUI DB":   return "MAC";
+            default:         return method.length() > 5
+                    ? method.substring(0, 4).toUpperCase() : method.toUpperCase();
+        }
     }
 
+    // ── Fondo de tarjeta ────────────────────────────────────────────
+
+    private android.graphics.drawable.Drawable createCardBackground(Context ctx) {
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        bg.setCornerRadius(12 * ctx.getResources().getDisplayMetrics().density);
+        bg.setColor(0xFF1C2333);
+        bg.setStroke((int)(1 * ctx.getResources().getDisplayMetrics().density), 0xFF30363D);
+        return bg;
+    }
+
+    private int dp(int dp, Context ctx) {
+        return (int) (dp * ctx.getResources().getDisplayMetrics().density);
+    }
+
+    // ── ViewHolder ───────────────────────────────────────────────────
+
     static class Holder extends RecyclerView.ViewHolder {
+        final ImageView iconView;
         final TextView txtName;
         final TextView txtIp;
         final TextView txtVendor;
         final TextView txtMethod;
+        final TextView txtType;
 
-        Holder(View itemView, TextView txtName, TextView txtIp,
-               TextView txtVendor, TextView txtMethod) {
+        Holder(View itemView, ImageView iconView,
+               TextView txtName, TextView txtIp,
+               TextView txtVendor, TextView txtMethod,
+               TextView txtType) {
             super(itemView);
+            this.iconView = iconView;
             this.txtName = txtName;
             this.txtIp = txtIp;
             this.txtVendor = txtVendor;
             this.txtMethod = txtMethod;
+            this.txtType = txtType;
         }
     }
 }

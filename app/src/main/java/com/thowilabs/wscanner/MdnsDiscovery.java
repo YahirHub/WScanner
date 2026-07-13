@@ -11,6 +11,7 @@ import java.net.MulticastSocket;
 import java.net.NetworkInterface;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
@@ -21,10 +22,9 @@ import java.util.Set;
  * Usa MulticastSocket crudo (RFC 6762) en vez de NsdManager, porque
  * NsdManager en API 34+ (targetSdk 36) requiere ACCESS_LOCAL_NETWORK.
  *
- * Dos estrategias:
- *   1. Service discovery (PTR _services._dns-sd._udp.local) → SRV → A
- *   2. Reverse lookup: para cada IP, query PTR a X.X.X.X.in-addr.arpa
- *      (exactamente como Fing, según análisis con tcpdump)
+ * Dos modos:
+ *   1. Service discovery: PTR _services._dns-sd._udp.local → A
+ *   2. Reverse lookup: Para cada IP, query PTR a X.X.X.X.in-addr.arpa
  */
 public class MdnsDiscovery {
 
@@ -34,95 +34,150 @@ public class MdnsDiscovery {
     private static final int TIMEOUT_MS = 4000;
 
     /**
-     * Descubre nombres mDNS para las IPs ya encontradas.
+     * Descubrimiento de servicios mDNS (no necesita IPs previas).
+     * Busca _services._dns-sd._udp.local → PTRs de tipos de servicio
+     * → instancias → SRV targets → direcciones A.
      *
-     * @param ips        IPs a consultar (vía reverse lookup)
      * @param localAddr  dirección local de la interfaz WiFi
      * @return Map IP → nombre .local
      */
-    public static Map<String, String> discover(Set<String> ips, InetAddress localAddr) {
+    public static Map<String, String> discoverServiceDiscovery(InetAddress localAddr) {
         Map<String, String> results = new HashMap<>();
         MulticastSocket socket = null;
         long t0 = System.currentTimeMillis();
 
         Log.i(TAG, "═══════════════════════════════════════");
-        Log.i(TAG, "🔵 Iniciando descubrimiento mDNS");
+        Log.i(TAG, "🔵 Iniciando mDNS service discovery");
 
         try {
-            socket = new MulticastSocket(MDNS_PORT);
-            socket.setSoTimeout(TIMEOUT_MS);
-            socket.setReuseAddress(true);
+            socket = createSocket(localAddr);
+            if (socket == null) return results;
 
-            // Unirse al grupo multicast en la interfaz WiFi
-            NetworkInterface netIf = NetworkInterface.getByInetAddress(localAddr);
-            if (netIf != null) {
-                InetAddress group = InetAddress.getByName(MDNS_ADDR);
-                socket.joinGroup(new InetSocketAddress(group, MDNS_PORT), netIf);
-                Log.d(TAG, "Unido a grupo multicast " + MDNS_ADDR + " en interfaz " + netIf.getDisplayName());
-            } else {
-                Log.w(TAG, "No se encontró NetworkInterface para " + localAddr + ", joinGroup sin interfaz");
-                socket.joinGroup(InetAddress.getByName(MDNS_ADDR));
-            }
-
-            // ── Paso 1: Service discovery (PTR _services._dns-sd._udp.local) ──
-            Log.d(TAG, "Enviando query PTR: _services._dns-sd._udp.local");
-            byte[] queryServices = buildDnsQuery("_services._dns-sd._udp.local", (short) 12); // PTR
+            // ── Paso 1: Descubrir tipos de servicio ──
+            Log.d(TAG, "Query PTR: _services._dns-sd._udp.local");
+            byte[] queryServices = buildDnsQuery("_services._dns-sd._udp.local", (short) 12);
             sendQuery(socket, queryServices);
 
-            // Esperar respuestas de servicios
-            Map<String, String> serviceIps = new HashMap<>();
-            try {
-                long deadline = System.currentTimeMillis() + 3000;
-                while (System.currentTimeMillis() < deadline) {
-                    byte[] response = receivePacket(socket, (int) (1500 - (System.currentTimeMillis() - deadline + 3000)));
-                    if (response == null) break;
-                    Map<String, String> parsed = parseDnsResponse(response, MDNS_ADDR);
-                    serviceIps.putAll(parsed);
+            // Recibir PTRs → nombres de tipo de servicio (_http._tcp.local, _googlecast._tcp.local...)
+            Set<String> serviceTypes = new HashSet<>();
+            collectPtrResponses(socket, 2000, serviceTypes, null);
+
+            Log.d(TAG, "Tipos de servicio encontrados: " + serviceTypes.size());
+            for (String st : serviceTypes) {
+                Log.v(TAG, "  Service type: " + st);
+            }
+
+            // ── Paso 2: Para servicios bien conocidos, buscar instancias ──
+            String[] wellKnownServices = {
+                    "_googlecast._tcp.local",
+                    "_airplay._tcp.local",
+                    "_raop._tcp.local",
+                    "_http._tcp.local",
+                    "_printer._tcp.local",
+                    "_smb._tcp.local",
+                    "_ssh._tcp.local",
+                    "_workstation._tcp.local",
+                    "_device-info._tcp.local",
+                    "_hap._tcp.local",
+                    "_homekit._tcp.local",
+                    "_companion-link._tcp.local"
+            };
+
+            // También añadir los tipos descubiertos dinámicamente
+            for (String st : serviceTypes) {
+                if (st.endsWith(".local") || st.endsWith(".local.")) {
+                    serviceTypes.add(st);
                 }
-            } catch (Exception e) {
-                Log.v(TAG, "Service discovery timeout (esperado): " + e.getMessage());
             }
 
-            for (Map.Entry<String, String> e : serviceIps.entrySet()) {
-                Log.i(TAG, "  🏷️  mDNS service: " + e.getKey() + " → " + e.getValue());
-                results.put(e.getKey(), e.getValue());
+            // Incluir servicios descubiertos que no estén en la lista predefinida
+            for (String wt : wellKnownServices) {
+                serviceTypes.add(wt);
             }
 
-            // ── Paso 2: Reverse lookup para cada IP ──
-            Log.d(TAG, "Reverse lookup mDNS para " + ips.size() + " IPs");
-            for (String ip : ips) {
-                String reverseName = ipToReverseArpa(ip);
-                if (reverseName == null) continue;
+            // ── Paso 3: Para cada tipo de servicio, buscar instancias ──
+            Map<String, String> instanceToType = new HashMap<>();
+            Map<String, Integer> instanceToPort = new HashMap<>();
 
-                byte[] query = buildDnsQuery(reverseName, (short) 12); // PTR
-                sendQuery(socket, query);
+            for (String serviceType : serviceTypes) {
+                // Query PTR para este tipo de servicio → obtener nombres de instancia
+                byte[] query = buildDnsQuery(serviceType, (short) 12);
+                try {
+                    sendQuery(socket, query);
+                } catch (IOException ignored) { continue; }
+
+                Set<String> instances = new HashSet<>();
+                collectPtrResponses(socket, 800, instances, null);
+
+                for (String inst : instances) {
+                    instanceToType.put(inst, serviceType);
+                }
+                Log.v(TAG, "  " + serviceType + " → " + instances.size() + " instancias");
             }
 
-            // Recibir respuestas de reverse lookup
-            try {
-                long deadline = System.currentTimeMillis() + 3000;
-                while (System.currentTimeMillis() < deadline) {
-                    int remaining = (int) (deadline - System.currentTimeMillis());
-                    if (remaining <= 0) break;
-                    socket.setSoTimeout(Math.max(remaining, 100));
-                    byte[] response = receivePacket(socket, remaining);
-                    if (response == null) break;
-                    Map<String, String> parsed = parseDnsResponse(response, MDNS_ADDR);
-                    for (Map.Entry<String, String> e : parsed.entrySet()) {
-                        if (!results.containsKey(e.getKey())) {
-                            Log.i(TAG, "  🏷️  mDNS reverse: " + e.getKey() + " → " + e.getValue());
-                            results.put(e.getKey(), e.getValue());
-                        }
+            // ── Paso 4: Para cada instancia, resolver SRV → host:port + A → IP ──
+            Map<String, String> hostToInstance = new HashMap<>();
+
+            for (Map.Entry<String, String> e : instanceToType.entrySet()) {
+                String instance = e.getKey();
+                String type = e.getValue();
+
+                // SRV query: instance.type
+                String srvName = instance + "." + type;
+                if (srvName.endsWith(".")) srvName = srvName.substring(0, srvName.length() - 1);
+                if (!srvName.endsWith(".local")) srvName += ".local";
+
+                byte[] srvQuery = buildDnsQuery(srvName, (short) 33);
+                try {
+                    sendQuery(socket, srvQuery);
+                } catch (IOException ignored) { continue; }
+
+                // Recibir SRV response
+                byte[] response = receivePacket(socket, 1000);
+                if (response != null) {
+                    Map<String, SrvEntry> srvResults = parseSrvResponse(response);
+                    for (Map.Entry<String, SrvEntry> sr : srvResults.entrySet()) {
+                        String host = sr.getValue().target;
+                        int port = sr.getValue().port;
+                        hostToInstance.put(host, instance);
+                        instanceToPort.put(instance, port);
+                        Log.d(TAG, "  SRV: " + instance + " → " + host + ":" + port);
                     }
                 }
-            } catch (Exception e) {
-                Log.v(TAG, "Reverse lookup timeout (esperado): " + e.getMessage());
+            }
+
+            // ── Paso 5: Resolver nombres de host a IPs ──
+            for (Map.Entry<String, String> e : hostToInstance.entrySet()) {
+                String hostname = e.getKey();
+                String instance = e.getValue();
+
+                String queryName = hostname;
+                if (!queryName.endsWith(".local") && !queryName.endsWith(".")) {
+                    queryName += ".local";
+                }
+
+                byte[] aQuery = buildDnsQuery(queryName, (short) 1); // A record
+                try {
+                    sendQuery(socket, aQuery);
+                } catch (IOException ignored) { continue; }
+
+                byte[] response = receivePacket(socket, 1000);
+                if (response != null) {
+                    Map<String, String> aResults = parseDnsResponse(response);
+                    for (Map.Entry<String, String> ar : aResults.entrySet()) {
+                        String displayName;
+                        if (instance.endsWith(".")) instance = instance.substring(0, instance.length() - 1);
+                        displayName = instance;
+                        results.put(ar.getKey(), displayName);
+                        Log.i(TAG, "  🏷️  mDNS: " + ar.getKey() + " → " + displayName);
+                    }
+                }
             }
 
             socket.leaveGroup(InetAddress.getByName(MDNS_ADDR));
 
         } catch (IOException e) {
-            Log.e(TAG, "Error en mDNS discovery: " + e.getMessage(), e);
+            Log.e(TAG, "Error en mDNS: " + e.getMessage(), e);
         } finally {
             if (socket != null) {
                 try { socket.close(); } catch (Exception ignored) {}
@@ -135,225 +190,376 @@ public class MdnsDiscovery {
         return results;
     }
 
-    // ═══════════════════════ DNS Packet Builder ═══════════════════
+    /**
+     * Reverse lookup: para cada IP → query PTR X.X.X.X.in-addr.arpa.
+     *
+     * @param ips       IPs a consultar
+     * @param localAddr dirección local de la interfaz WiFi
+     * @return Map IP → nombre .local
+     */
+    public static Map<String, String> discoverReverseLookups(Set<String> ips, InetAddress localAddr) {
+        Map<String, String> results = new HashMap<>();
+        MulticastSocket socket = null;
+
+        try {
+            socket = createSocket(localAddr);
+            if (socket == null) return results;
+
+            // Enviar queries PTR para cada IP
+            int sent = 0;
+            for (String ip : ips) {
+                String reverseName = ipToReverseArpa(ip);
+                if (reverseName == null) continue;
+
+                byte[] query = buildDnsQuery(reverseName, (short) 12);
+                try {
+                    sendQuery(socket, query);
+                    sent++;
+                } catch (IOException ignored) {
+                }
+            }
+            Log.d(TAG, "Reverse lookup: " + sent + " queries enviadas");
+
+            // Recibir respuestas
+            long deadline = System.currentTimeMillis() + 3000;
+            int recovered = 0;
+            while (System.currentTimeMillis() < deadline) {
+                int remaining = (int) (deadline - System.currentTimeMillis());
+                if (remaining <= 0) break;
+                byte[] response = receivePacket(socket, remaining);
+                if (response == null) break;
+                Map<String, String> parsed = parseDnsResponse(response);
+                for (Map.Entry<String, String> e : parsed.entrySet()) {
+                    results.put(e.getKey(), e.getValue());
+                    recovered++;
+                    Log.i(TAG, "  🏷️  mDNS reverse: " + e.getKey() + " → " + e.getValue());
+                }
+            }
+
+            Log.d(TAG, "Reverse lookup: " + recovered + " respuestas con IP");
+
+            socket.leaveGroup(InetAddress.getByName(MDNS_ADDR));
+
+        } catch (IOException e) {
+            Log.e(TAG, "Error en reverse mDNS: " + e.getMessage(), e);
+        } finally {
+            if (socket != null) {
+                try { socket.close(); } catch (Exception ignored) {}
+            }
+        }
+
+        return results;
+    }
+
+    // ═══════════════════════ Socket helpers ════════════════════════
+
+    private static MulticastSocket createSocket(InetAddress localAddr) {
+        try {
+            MulticastSocket socket = new MulticastSocket(MDNS_PORT);
+            socket.setSoTimeout(TIMEOUT_MS);
+            socket.setReuseAddress(true);
+
+            NetworkInterface netIf = NetworkInterface.getByInetAddress(localAddr);
+            if (netIf != null) {
+                InetAddress group = InetAddress.getByName(MDNS_ADDR);
+                socket.joinGroup(new InetSocketAddress(group, MDNS_PORT), netIf);
+                Log.d(TAG, "Unido a grupo multicast " + MDNS_ADDR + " en " + netIf.getDisplayName());
+            } else {
+                socket.joinGroup(InetAddress.getByName(MDNS_ADDR));
+            }
+            return socket;
+        } catch (IOException e) {
+            Log.e(TAG, "Error creando socket mDNS: " + e.getMessage());
+            return null;
+        }
+    }
+
+    // ═══════════════════════ PTR collector ════════════════════════
 
     /**
-     * Construye un paquete DNS query (RFC 1035 / 6762).
-     *
-     * @param name  nombre del registro (ej: "_services._dns-sd._udp.local")
-     * @param qtype tipo de query (12 = PTR, 255 = ANY, 33 = SRV, 1 = A)
+     * Recibe respuestas PTR y recolecta los nombres PTR.
+     * Si ipResults != null, también recolecta mapeos IP → nombre.
      */
-    static byte[] buildDnsQuery(String name, short qtype) {
-        try {
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
+    private static void collectPtrResponses(MulticastSocket socket, int timeoutMs,
+                                            Set<String> ptrNames,
+                                            Map<String, String> ipResults) {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (System.currentTimeMillis() < deadline) {
+            int remaining = (int) (deadline - System.currentTimeMillis());
+            if (remaining <= 50) break;
+            byte[] response = receivePacket(socket, remaining);
+            if (response == null) break;
 
-            // Header (12 bytes)
-            short txId = (short) new Random().nextInt(65536);
-            out.write((txId >> 8) & 0xFF);
-            out.write(txId & 0xFF);
-            // Flags: 0x0000 (standard query, not truncated, no recursion)
-            out.write(0x00);
-            out.write(0x00);
-            // QDCOUNT = 1
-            out.write(0x00);
-            out.write(0x01);
-            // ANCOUNT = 0
-            out.write(0x00);
-            out.write(0x00);
-            // NSCOUNT = 0
-            out.write(0x00);
-            out.write(0x00);
-            // ARCOUNT = 0
-            out.write(0x00);
-            out.write(0x00);
+            try {
+                if (response.length < 12) continue;
 
-            // Question section
-            encodeDnsName(out, name);
-            // QTYPE
-            out.write((qtype >> 8) & 0xFF);
-            out.write(qtype & 0xFF);
-            // QCLASS = 1 (IN) but mDNS uses 0x0001 for IN or 0x8001 for cache-flush
-            out.write(0x00);
-            out.write(0x01);
+                int ancount = ((response[6] & 0xFF) << 8) | (response[7] & 0xFF);
+                if (ancount == 0) {
+                    // También mirar additional records (no los contamos en ancount pero no importa)
+                    int arcount = ((response[10] & 0xFF) << 8) | (response[11] & 0xFF);
+                    if (arcount == 0) continue;
+                }
 
-            return out.toByteArray();
-        } catch (IOException e) {
-            // ByteArrayOutputStream never throws IOException
-            return new byte[0];
+                Map<String, String> parsed = parseDnsResponse(response);
+
+                if (ipResults != null) {
+                    ipResults.putAll(parsed);
+                }
+
+                // Extraer nombres PTR del response (para service discovery)
+                if (ptrNames != null) {
+                    extractPtrNames(response, ptrNames);
+                }
+
+            } catch (Exception ex) {
+                Log.v(TAG, "Error recolectando PTR: " + ex.getMessage());
+            }
         }
     }
 
     /**
-     * Codifica un nombre DNS en formato label (3www6google3com0).
+     * Extrae nombres PTR (service types, instance names) de una respuesta DNS.
      */
+    private static void extractPtrNames(byte[] data, Set<String> names) {
+        try {
+            if (data.length < 12) return;
+            int ancount = ((data[6] & 0xFF) << 8) | (data[7] & 0xFF);
+            int nscount = ((data[8] & 0xFF) << 8) | (data[9] & 0xFF);
+            int arcount = ((data[10] & 0xFF) << 8) | (data[11] & 0xFF);
+
+            int pos = 12;
+            // Saltar questions
+            int qdcount = ((data[4] & 0xFF) << 8) | (data[5] & 0xFF);
+            for (int i = 0; i < qdcount && pos < data.length; i++) {
+                int len;
+                while ((len = data[pos++] & 0xFF) != 0) {
+                    if ((len & 0xC0) == 0xC0) { pos++; break; }
+                    pos += len;
+                }
+                if (pos >= data.length) break;
+                pos += 4; // QTYPE + QCLASS
+            }
+
+            int totalRecords = ancount + nscount + arcount;
+            for (int i = 0; i < totalRecords && pos + 10 <= data.length; i++) {
+                // NAME
+                Object[] nameResult = readName(data, pos);
+                pos = ((Integer) nameResult[0]).intValue();
+                if (pos + 10 > data.length) break;
+
+                int rtype = ((data[pos] & 0xFF) << 8) | (data[pos + 1] & 0xFF);
+                int rdlength = ((data[pos + 8] & 0xFF) << 8) | (data[pos + 9] & 0xFF);
+                int rdataStart = pos + 10;
+                if (rdataStart + rdlength > data.length) break;
+
+                if (rtype == 12) {
+                    // PTR: el RDATA es un nombre
+                    Object[] ptrResult = readName(data, rdataStart);
+                    String ptrName = (String) ptrResult[1];
+                    if (!ptrName.isEmpty()) {
+                        // Normalizar: quitar .local final y trailing dot
+                        String clean = ptrName.replaceAll("\\.local\\.?$", "");
+                        if (clean.endsWith(".")) clean = clean.substring(0, clean.length() - 1);
+                        if (!clean.isEmpty()) {
+                            names.add(clean);
+                        }
+                    }
+                }
+
+                pos = rdataStart + rdlength;
+            }
+        } catch (Exception e) {
+            Log.v(TAG, "Error extrayendo PTR names: " + e.getMessage());
+        }
+    }
+
+    // ═══════════════════════ DNS Packet Builder ═══════════════════
+
+    static byte[] buildDnsQuery(String name, short qtype) {
+        try {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            short txId = (short) new Random().nextInt(65536);
+            out.write((txId >> 8) & 0xFF);
+            out.write(txId & 0xFF);
+            out.write(0x00); out.write(0x00); // flags
+            out.write(0x00); out.write(0x01); // QDCOUNT=1
+            out.write(0x00); out.write(0x00); // ANCOUNT=0
+            out.write(0x00); out.write(0x00); // NSCOUNT=0
+            out.write(0x00); out.write(0x00); // ARCOUNT=0
+            encodeDnsName(out, name);
+            out.write((qtype >> 8) & 0xFF);
+            out.write(qtype & 0xFF);
+            out.write(0x00); out.write(0x01); // QCLASS=IN
+            return out.toByteArray();
+        } catch (IOException e) {
+            return new byte[0];
+        }
+    }
+
     static void encodeDnsName(ByteArrayOutputStream out, String name) throws IOException {
-        String[] labels = name.split("\\.");
-        for (String label : labels) {
+        for (String label : name.split("\\.")) {
             byte[] bytes = label.getBytes("UTF-8");
             out.write(bytes.length);
             out.write(bytes);
         }
-        out.write(0x00); // terminador
+        out.write(0x00);
     }
 
     // ═══════════════════════ DNS Response Parser ═══════════════════
 
     /**
-     * Parsea una respuesta DNS y extrae mapeo IP → hostname.
-     *
-     * Busca ANY, PTR y SRV records. Si encuentra SRV, resuelve el target
-     * a una IP buscando records A/AAAA en la sección de adicionales.
+     * Parsea una respuesta DNS → Map<IP, hostname>.
+     * Captura A records, PTR reverse, y SRV → A.
      */
-    static Map<String, String> parseDnsResponse(byte[] data, String sourceAddr) {
+    static Map<String, String> parseDnsResponse(byte[] data) {
         Map<String, String> results = new HashMap<>();
-
         if (data == null || data.length < 12) return results;
 
         try {
-            // Leer header
-            int txId = ((data[0] & 0xFF) << 8) | (data[1] & 0xFF);
             int flags = ((data[2] & 0xFF) << 8) | (data[3] & 0xFF);
-            boolean isResponse = (flags & 0x8000) != 0;
-            if (!isResponse) return results; // ignorar queries entrantes
+            if ((flags & 0x8000) == 0) return results; // es query, no response
 
             int qdcount = ((data[4] & 0xFF) << 8) | (data[5] & 0xFF);
             int ancount = ((data[6] & 0xFF) << 8) | (data[7] & 0xFF);
             int nscount = ((data[8] & 0xFF) << 8) | (data[9] & 0xFF);
             int arcount = ((data[10] & 0xFF) << 8) | (data[11] & 0xFF);
 
-            Log.v(TAG, "  DNS response: txId=" + txId + " answers=" + ancount
-                    + " additional=" + arcount + " from=" + sourceAddr);
-
-            DnsNameReader reader = new DnsNameReader(data);
-
-            // Saltar sección de preguntas
+            // Saltar questions
             int pos = 12;
-            for (int i = 0; i < qdcount; i++) {
-                Object[] result = skipName(data, pos);
-                pos = ((Integer) result[0]).intValue() + 4; // name + QTYPE(2) + QCLASS(2)
+            for (int i = 0; i < qdcount && pos < data.length; i++) {
+                Object[] r = skipName(data, pos);
+                pos = ((Integer) r[0]).intValue() + 4;
             }
 
-            // Parsear answers, authorities, y additional (todos igual estructura)
-            parseRecords(data, pos, ancount + nscount + arcount, reader, results, sourceAddr);
+            // Parsear answers + additional
+            int total = ancount + nscount + arcount;
+            parseRecords(data, pos, total, results);
 
         } catch (Exception e) {
             Log.v(TAG, "Error parseando DNS: " + e.getMessage());
         }
-
         return results;
     }
 
     private static void parseRecords(byte[] data, int pos, int count,
-                                      DnsNameReader reader,
-                                      Map<String, String> results,
-                                      String sourceAddr) {
+                                      Map<String, String> results) {
+        // Primera pasada: recolectar A records y SRV targets
+        Map<String, String> hostToIp = new HashMap<>(); // hostname.local → IP
+        Map<String, String> ipToHost = new HashMap<>(); // IP → hostname.local
+
         for (int i = 0; i < count && pos + 10 <= data.length; i++) {
             try {
-                // NAME (puede ser comprimido con pointer)
                 Object[] nameResult = readName(data, pos);
                 String recordName = (String) nameResult[1];
                 pos = ((Integer) nameResult[0]).intValue();
-
                 if (pos + 10 > data.length) break;
 
                 int rtype = ((data[pos] & 0xFF) << 8) | (data[pos + 1] & 0xFF);
-                // int rclass = ((data[pos + 2] & 0xFF) << 8) | (data[pos + 3] & 0xFF);
-                // int ttl = ((data[pos + 4] & 0xFF) << 24) | ...;
                 int rdlength = ((data[pos + 8] & 0xFF) << 8) | (data[pos + 9] & 0xFF);
                 int rdataStart = pos + 10;
-
                 if (rdataStart + rdlength > data.length) break;
 
-                Log.v(TAG, "    record#" + i + " name=" + recordName + " type=" + rtype
-                        + " rdlength=" + rdlength);
-
                 if (rtype == 1 && rdlength == 4) {
-                    // A record — mapear IP → nombre
+                    // A record
                     String ip = (data[rdataStart] & 0xFF) + "."
                             + (data[rdataStart + 1] & 0xFF) + "."
                             + (data[rdataStart + 2] & 0xFF) + "."
                             + (data[rdataStart + 3] & 0xFF);
-                    String hostname = cleanDotLocal(recordName);
-                    if (!hostname.isEmpty()) {
-                        results.put(ip, hostname);
-                        Log.i(TAG, "  A record: " + ip + " → " + hostname);
+                    String host = cleanDotLocal(recordName);
+                    if (!host.isEmpty() && isValidHostname(host)) {
+                        hostToIp.put(host, ip);
+                        ipToHost.put(ip, host);
                     }
                 } else if (rtype == 12) {
-                    // PTR record — el RDATA contiene un nombre
+                    // PTR — puede ser reverse (in-addr.arpa) o service discovery
                     Object[] ptrResult = readName(data, rdataStart);
-                    String ptrName = cleanDotLocal((String) ptrResult[1]);
-                    Log.v(TAG, "    PTR: " + recordName + " → " + ptrName);
-                    // Si el nombre de la pregunta es un reverse (in-addr.arpa)
-                    // y la respuesta PTR apunta a un .local
-                    if (recordName.contains("in-addr.arpa") && ptrName.endsWith(".local")) {
-                        // Extraer IP de la pregunta
+                    String ptrName = (String) ptrResult[1];
+
+                    if (recordName.contains("in-addr.arpa")) {
+                        // Reverse lookup: IP → hostname.local
                         String ip = extractIpFromArpa(recordName);
                         if (ip != null) {
-                            results.put(ip, ptrName);
-                            Log.i(TAG, "  PTR reverse: " + ip + " → " + ptrName);
+                            String host = cleanDotLocal(ptrName);
+                            if (!host.isEmpty() && isValidHostname(host)) {
+                                results.put(ip, host);
+                            }
                         }
                     }
-                    // También capturar PTRs de service discovery (_http._tcp.local → hostname.local)
-                    if (!ptrName.isEmpty() && recordName.contains("._")) {
-                        Log.i(TAG, "  PTR service: " + recordName + " → " + ptrName);
-                        // No tenemos la IP aún, la guardamos con key=nombre para búsqueda posterior
-                    }
-                } else if (rtype == 33 && rdlength >= 6) {
-                    // SRV record — extraer el target (nombre del host)
-                    // priority(2) + weight(2) + port(2) + target(variable)
-                    Object[] targetResult = readName(data, rdataStart + 6);
-                    String targetName = cleanDotLocal((String) targetResult[1]);
-                    Log.i(TAG, "  SRV target: " + recordName + " → " + targetName + " (port=" 
-                            + (((data[rdataStart + 4] & 0xFF) << 8) | (data[rdataStart + 5] & 0xFF)) + ")");
-                } else if (rtype == 16) {
-                    // TXT record
-                    Log.v(TAG, "    TXT record: " + recordName);
-                } else if (rtype == 28) {
-                    // AAAA record (IPv6)
-                    Log.v(TAG, "    AAAA record: " + recordName);
-                } else {
-                    Log.v(TAG, "    Tipo desconocido: " + rtype + " name=" + recordName);
+                    // Service PTR (ignoramos aquí, se maneja en extractPtrNames)
                 }
 
                 pos = rdataStart + rdlength;
             } catch (Exception e) {
-                Log.v(TAG, "Error en record #" + i + ": " + e.getMessage());
                 break;
             }
         }
     }
 
+    /**
+     * Parsea respuesta SRV → Map<instance, SrvEntry>.
+     */
+    private static Map<String, SrvEntry> parseSrvResponse(byte[] data) {
+        Map<String, SrvEntry> results = new HashMap<>();
+        if (data == null || data.length < 12) return results;
+
+        try {
+            int flags = ((data[2] & 0xFF) << 8) | (data[3] & 0xFF);
+            if ((flags & 0x8000) == 0) return results;
+
+            int qdcount = ((data[4] & 0xFF) << 8) | (data[5] & 0xFF);
+            int ancount = ((data[6] & 0xFF) << 8) | (data[7] & 0xFF);
+            int nscount = ((data[8] & 0xFF) << 8) | (data[9] & 0xFF);
+            int arcount = ((data[10] & 0xFF) << 8) | (data[11] & 0xFF);
+
+            int pos = 12;
+            for (int i = 0; i < qdcount && pos < data.length; i++) {
+                Object[] r = skipName(data, pos);
+                pos = ((Integer) r[0]).intValue() + 4;
+            }
+
+            int total = ancount + nscount + arcount;
+            for (int i = 0; i < total && pos + 10 <= data.length; i++) {
+                Object[] nameResult = readName(data, pos);
+                String recordName = (String) nameResult[1];
+                pos = ((Integer) nameResult[0]).intValue();
+                if (pos + 10 > data.length) break;
+
+                int rtype = ((data[pos] & 0xFF) << 8) | (data[pos + 1] & 0xFF);
+                int rdlength = ((data[pos + 8] & 0xFF) << 8) | (data[pos + 9] & 0xFF);
+                int rdataStart = pos + 10;
+                if (rdataStart + rdlength > data.length) break;
+
+                if (rtype == 33 && rdlength >= 6) {
+                    int port = ((data[rdataStart + 4] & 0xFF) << 8) | (data[rdataStart + 5] & 0xFF);
+                    Object[] targetResult = readName(data, rdataStart + 6);
+                    String target = (String) targetResult[1];
+                    results.put(recordName, new SrvEntry(target, port));
+                }
+                pos = rdataStart + rdlength;
+            }
+        } catch (Exception e) {
+            Log.v(TAG, "Error en parseSrv: " + e.getMessage());
+        }
+        return results;
+    }
+
     // ═══════════════════════ DNS Name Helpers ═══════════════════════
 
-    /**
-     * Lee un nombre DNS (posiblemente comprimido con puntero 0xC000).
-     * Retorna [nuevaPosición (Integer), nombreLeído (String)].
-     */
     static Object[] readName(byte[] data, int pos) {
         StringBuilder name = new StringBuilder();
         int originalPos = pos;
         boolean jumped = false;
-        int maxJumps = 10;
 
-        while (maxJumps-- > 0) {
+        for (int hops = 0; hops < 20; hops++) {
             if (pos >= data.length) break;
-
             int len = data[pos] & 0xFF;
-            if (len == 0) {
-                if (!jumped) pos++;
-                break;
-            }
+            if (len == 0) { if (!jumped) pos++; break; }
             if ((len & 0xC0) == 0xC0) {
-                // Puntero comprimido
                 if (pos + 1 >= data.length) break;
                 int offset = ((len & 0x3F) << 8) | (data[pos + 1] & 0xFF);
-                if (!jumped) {
-                    originalPos = pos + 2;
-                    jumped = true;
-                }
+                if (!jumped) { originalPos = pos + 2; jumped = true; }
                 pos = offset;
             } else {
-                // Label normal
                 pos++;
                 if (pos + len > data.length) break;
                 if (name.length() > 0) name.append(".");
@@ -361,52 +567,36 @@ public class MdnsDiscovery {
                 pos += len;
             }
         }
-
         return new Object[]{Integer.valueOf(jumped ? originalPos : pos), name.toString()};
     }
 
-    /**
-     * Salta un nombre DNS sin leerlo. Retorna [nuevaPosición (Integer), ""].
-     */
     static Object[] skipName(byte[] data, int pos) {
         boolean jumped = false;
         int originalPos = pos;
-        int maxJumps = 10;
-
-        while (maxJumps-- > 0) {
+        for (int hops = 0; hops < 20; hops++) {
             if (pos >= data.length) break;
             int len = data[pos] & 0xFF;
-            if (len == 0) {
-                if (!jumped) pos++;
-                break;
-            }
+            if (len == 0) { if (!jumped) pos++; break; }
             if ((len & 0xC0) == 0xC0) {
                 if (!jumped) originalPos = pos + 2;
-                pos = (pos + 2 < data.length) ? ((len & 0x3F) << 8) | (data[pos + 1] & 0xFF) : pos;
+                pos += 2;
                 jumped = true;
+                break;
             } else {
                 pos += 1 + len;
             }
         }
-
         return new Object[]{Integer.valueOf(jumped ? originalPos : pos), ""};
     }
 
-    // ═══════════════════════ Helpers ═══════════════════════════════
+    // ═══════════════════════ Conversion helpers ═══════════════════
 
-    /**
-     * Convierte "192.168.1.80" → "80.1.168.192.in-addr.arpa"
-     */
     static String ipToReverseArpa(String ip) {
         String[] parts = ip.split("\\.");
         if (parts.length != 4) return null;
         return parts[3] + "." + parts[2] + "." + parts[1] + "." + parts[0] + ".in-addr.arpa";
     }
 
-    /**
-     * Extrae la IP de un nombre arpa inverso.
-     * "80.1.168.192.in-addr.arpa" → "192.168.1.80"
-     */
     static String extractIpFromArpa(String arpaName) {
         if (!arpaName.contains("in-addr.arpa")) return null;
         String[] parts = arpaName.split("\\.");
@@ -417,19 +607,23 @@ public class MdnsDiscovery {
     }
 
     /**
-     * Limpia un nombre .local quitando el dominio .local y
-     * nombres internos (como @, *, etc).
+     * Limpia nombre .local → quitar dominio y trailing dot.
+     * NO filtra nombres que empiecen con _ porque son nombres de servicio válidos.
      */
     static String cleanDotLocal(String name) {
         if (name == null || name.isEmpty()) return "";
         String cleaned = name.replaceAll("\\.local\\.?$", "");
-        // Ignorar nombres de servicio DNS-SD internos
-        if (cleaned.startsWith("_") || cleaned.isEmpty()
-                || cleaned.equals("@") || cleaned.equals("*")) {
-            return "";
-        }
+        if (cleaned.endsWith(".")) cleaned = cleaned.substring(0, cleaned.length() - 1);
+        if (cleaned.isEmpty() || cleaned.equals("@") || cleaned.equals("*")) return "";
         return cleaned;
     }
+
+    /** Rechaza IPs (no queremos "192.168.1.80" como hostname). */
+    private static boolean isValidHostname(String host) {
+        return !host.matches("\\d+\\.\\d+\\.\\d+\\.\\d+") && host.length() >= 2;
+    }
+
+    // ═══════════════════════ I/O ══════════════════════════════════
 
     static void sendQuery(MulticastSocket socket, byte[] data) throws IOException {
         DatagramPacket packet = new DatagramPacket(data, data.length,
@@ -451,11 +645,11 @@ public class MdnsDiscovery {
         }
     }
 
-    /**
-     * Clase auxiliar para lectura pos-declarativa de nombres DNS.
-     */
-    static class DnsNameReader {
-        final byte[] data;
-        DnsNameReader(byte[] data) { this.data = data; }
+    // ═══════════════════════ Data classes ═════════════════════════
+
+    static class SrvEntry {
+        final String target;
+        final int port;
+        SrvEntry(String target, int port) { this.target = target; this.port = port; }
     }
 }
