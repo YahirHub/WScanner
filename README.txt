@@ -1,0 +1,1 @@
+Reemplaza app/src/main/AndroidManifest.xml por este archivo. La correccion agrega android:exported='true' a MainActivity.
