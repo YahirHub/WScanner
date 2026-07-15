@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/layoutEmpty"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="48dp"
+    android:visibility="visible">
+
+    <!-- Radar icon container with subtle background circle -->
+    <FrameLayout
+        android:layout_width="96dp"
+        android:layout_height="96dp"
+        android:layout_marginBottom="24dp">
+
+        <View
+            android:layout_width="96dp"
+            android:layout_height="96dp"
+            android:background="@drawable/circle_radar_bg" />
+
+        <ImageView
+            android:id="@+id/imgEmptyRadar"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_gravity="center"
+            android:src="@drawable/ic_radar"
+            android:alpha="0.5" />
+    </FrameLayout>
+
+    <!-- Title -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Escáner de Red"
+        android:textColor="#FFE6EDF3"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:fontFamily="sans-serif-medium"
+        android:layout_marginBottom="12dp" />
+
+    <!-- Subtitle -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Conectado a tu red WiFi. Presiona el botón Escanear o desliza hacia abajo para descubrir todos los dispositivos conectados."
+        android:textColor="#FF8B949E"
+        android:textSize="14sp"
+        android:gravity="center_horizontal"
+        android:lineSpacingExtra="4sp"
+        android:fontFamily="sans-serif" />
+
+    <!-- Hint text for empty results after scan -->
+    <TextView
+        android:id="@+id/txtEmptyHint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="No se encontraron dispositivos. Verifica tu conexión WiFi."
+        android:textColor="#FF6E7681"
+        android:textSize="13sp"
+        android:gravity="center_horizontal"
+        android:visibility="gone"
+        android:layout_marginTop="16dp"
+        android:padding="12dp"
+        android:background="@drawable/badge_empty_hint"
+        android:paddingHorizontal="16dp" />
+
+</LinearLayout>

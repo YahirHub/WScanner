@@ -38,11 +38,5 @@
         <item name="android:fontFamily">sans-serif-medium</item>
     </style>
 
-    <style name="AboutDialog" parent="ThemeOverlay.MaterialComponents.MaterialAlertDialog">
-        <item name="android:background">@color/bg_card</item>
-        <item name="colorSurface">@color/bg_card</item>
-        <item name="colorOnSurface">@color/text_primary</item>
-        <item name="colorPrimary">@color/accent_primary</item>
-        <item name="colorOnPrimary">@color/bg_primary</item>
-    </style>
+    <!-- AboutDialog style removed — now using AboutActivity instead -->
 </resources>

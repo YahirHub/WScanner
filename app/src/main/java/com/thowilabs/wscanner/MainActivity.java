@@ -1,11 +1,14 @@
 package com.thowilabs.wscanner;
 
+import android.animation.ObjectAnimator;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.animation.DecelerateInterpolator;
+import android.view.animation.LinearInterpolator;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -47,13 +50,28 @@ public class MainActivity extends AppCompatActivity
     private LinearLayout layoutNetworkInfo;
     private SwipeRefreshLayout swipeRefresh;
 
+    // Premium: empty state & placeholders
+    private View layoutEmpty;
+    private View layoutPlaceholders;
+    private TextView txtEmptyHint;
+    private boolean hasScannedBefore = false;
+
+    // Acerca de view (embedded, no separate activity)
+    private View layoutAbout;
+    private View layoutScannerContent;
+    private Toolbar toolbar;
+    private boolean showingAbout = false;
+
+    // Premium: FAB rotation animation
+    private ObjectAnimator fabRotationAnim;
+
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
         setContentView(R.layout.activity_main);
 
         // Toolbar
-        Toolbar toolbar = findViewById(R.id.toolbar);
+        toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
         // Drawer + hamburguesa
@@ -79,6 +97,15 @@ public class MainActivity extends AppCompatActivity
         layoutNetworkInfo = (LinearLayout) findViewById(R.id.layoutNetworkInfo);
         swipeRefresh = findViewById(R.id.swipeRefresh);
 
+        // Premium: empty state & placeholders
+        layoutEmpty = findViewById(R.id.layoutEmpty);
+        layoutPlaceholders = findViewById(R.id.layoutPlaceholders);
+        txtEmptyHint = findViewById(R.id.txtEmptyHint);
+
+        // Acerca de view
+        layoutAbout = findViewById(R.id.layoutAbout);
+        layoutScannerContent = findViewById(R.id.layoutScannerContent);
+
         // RecyclerView
         RecyclerView rv = findViewById(R.id.listDevices);
         rv.setLayoutManager(new LinearLayoutManager(this));
@@ -88,12 +115,32 @@ public class MainActivity extends AppCompatActivity
         // Mostrar info de red actual
         updateNetworkInfo();
 
-        // FAB click
-        btnScan.setOnClickListener(v -> startScan());
+        // FAB click with haptic feedback
+        btnScan.setOnClickListener(v -> {
+            HapticUtil.performConfirm(btnScan);
+            startScan();
+        });
+
+        // FAB press state animation
+        btnScan.setOnTouchListener((v, event) -> {
+            switch (event.getAction()) {
+                case android.view.MotionEvent.ACTION_DOWN:
+                    v.animate().scaleX(0.88f).scaleY(0.88f).setDuration(100).start();
+                    return false;
+                case android.view.MotionEvent.ACTION_UP:
+                case android.view.MotionEvent.ACTION_CANCEL:
+                    v.animate().scaleX(1f).scaleY(1f).setDuration(150).start();
+                    return false;
+            }
+            return false;
+        });
 
         // Swipe to refresh
         swipeRefresh.setOnRefreshListener(this::startScan);
         swipeRefresh.setColorSchemeColors(0xFF00E5FF, 0xFF00B8D4, 0xFF3FB950);
+
+        // Premium: setup FAB rotation animation
+        setupFabRotation();
     }
 
     // ── Info de red ────────────────────────────────────────────────
@@ -117,7 +164,19 @@ public class MainActivity extends AppCompatActivity
                             (gw & 0xff), (gw >> 8 & 0xff),
                             (gw >> 16 & 0xff), (gw >> 24 & 0xff)));
                 }
-                layoutNetworkInfo.setVisibility(View.VISIBLE);
+
+                // Premium: fade-in animation for network info header
+                if (layoutNetworkInfo.getVisibility() != View.VISIBLE) {
+                    layoutNetworkInfo.setAlpha(0f);
+                    layoutNetworkInfo.setTranslationY(-20f);
+                    layoutNetworkInfo.setVisibility(View.VISIBLE);
+                    layoutNetworkInfo.animate()
+                            .alpha(1f)
+                            .translationY(0f)
+                            .setDuration(400)
+                            .setInterpolator(new DecelerateInterpolator())
+                            .start();
+                }
             }
         } catch (Exception ignored) {
             Log.w(TAG, "No se pudo leer info de WiFi");
@@ -131,31 +190,38 @@ public class MainActivity extends AppCompatActivity
         int id = item.getItemId();
 
         if (id == R.id.nav_scanner) {
-            // Ya estamos en la pantalla principal
+            showScanner();
         } else if (id == R.id.nav_about) {
-            showAboutDialog();
+            showAbout();
         }
 
         drawerLayout.closeDrawer(navView);
         return true;
     }
 
-    private void showAboutDialog() {
-        new android.app.AlertDialog.Builder(this, R.style.AboutDialog)
-                .setTitle("WScanner")
-                .setMessage("v1.0 — Escáner de red local\n\n"
-                        + "Desarrollado por Thowilabs\n\n"
-                        + "thowilabs.com\n\n"
-                        + "Una alternativa gratuita, sin anuncios ni rastreo, "
-                        + "para descubrir y analizar dispositivos en tu red local.")
-                .setPositiveButton("Cerrar", null)
-                .show();
+    private void showScanner() {
+        if (!showingAbout) return;
+        showingAbout = false;
+        layoutScannerContent.setVisibility(View.VISIBLE);
+        btnScan.setVisibility(View.VISIBLE);
+        layoutAbout.setVisibility(View.GONE);
+        navView.setCheckedItem(R.id.nav_scanner);
+    }
+
+    private void showAbout() {
+        if (showingAbout) return;
+        showingAbout = true;
+        layoutScannerContent.setVisibility(View.GONE);
+        btnScan.setVisibility(View.GONE);
+        layoutAbout.setVisibility(View.VISIBLE);
+        navView.setCheckedItem(R.id.nav_about);
     }
 
     // ── Escaneo ────────────────────────────────────────────────────
 
     private void startScan() {
         Log.i(TAG, "🧹 Limpiando lista previa (" + devices.size() + " dispositivos)");
+        hasScannedBefore = true;
         devices.clear();
         ipIndex.clear();
         adapter.notifyDataSetChanged();
@@ -192,6 +258,13 @@ public class MainActivity extends AppCompatActivity
                                 + device.ip + " → \"" + device.name
                                 + "\" [" + device.discoveryMethod + "]");
                     }
+
+                    // Premium: hide placeholders when first device appears
+                    if (devices.size() == 1) {
+                        layoutPlaceholders.setVisibility(View.GONE);
+                    }
+
+                    updateEmptyState();
                 });
             }
 
@@ -210,9 +283,11 @@ public class MainActivity extends AppCompatActivity
                     setScanning(false);
                     txtStatus.setText("Escaneo completo — " + totalFound + " dispositivo(s)");
                     txtDeviceCount.setText(String.valueOf(devices.size()));
-                    if (devices.isEmpty()) {
-                        txtStatus.setText("No se encontraron dispositivos");
-                    }
+
+                    // Premium: haptic feedback on scan complete
+                    HapticUtil.performHeavy(btnScan);
+
+                    // updateEmptyState() is already called inside setScanning()
                 });
             }
         });
@@ -243,17 +318,80 @@ public class MainActivity extends AppCompatActivity
         btnScan.setEnabled(!scanning);
         progressScan.setVisibility(scanning ? View.VISIBLE : View.GONE);
         swipeRefresh.setRefreshing(scanning);
+
+        // Premium: FAB rotation animation
         if (scanning) {
             progressScan.setProgress(0);
             txtStatus.setText("Iniciando escaneo…");
             txtDeviceCount.setText("…");
+
+            // Premium: show placeholders during scan
+            if (devices.isEmpty()) {
+                layoutPlaceholders.setVisibility(View.VISIBLE);
+            }
+
+            // Start FAB rotation
+            if (fabRotationAnim != null && !fabRotationAnim.isRunning()) {
+                fabRotationAnim.start();
+            }
+        } else {
+            // Stop FAB rotation with smooth finish
+            if (fabRotationAnim != null && fabRotationAnim.isRunning()) {
+                fabRotationAnim.cancel();
+            }
+            btnScan.animate().rotation(0f).setDuration(300)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .start();
+
+            // Hide placeholders
+            layoutPlaceholders.setVisibility(View.GONE);
         }
+
+        updateEmptyState();
+    }
+
+    // ── Premium: Empty State ───────────────────────────────────────
+
+    private void updateEmptyState() {
+        boolean scanning = !btnScan.isEnabled();
+
+        if (devices.isEmpty() && !scanning) {
+            // Show empty state
+            layoutEmpty.setVisibility(View.VISIBLE);
+            layoutEmpty.setAlpha(0f);
+            layoutEmpty.animate().alpha(1f).setDuration(300).start();
+
+            if (hasScannedBefore) {
+                // Scan completed with 0 results
+                txtEmptyHint.setVisibility(View.VISIBLE);
+            } else {
+                // Initial state — never scanned
+                txtEmptyHint.setVisibility(View.GONE);
+            }
+        } else if (layoutEmpty.getVisibility() == View.VISIBLE) {
+            // Fade out and hide empty state (has devices or scanning)
+            layoutEmpty.animate().alpha(0f).setDuration(200)
+                    .withEndAction(() -> layoutEmpty.setVisibility(View.GONE))
+                    .start();
+        }
+        // If already GONE, no action needed
+    }
+
+    // ── Premium: FAB Rotation Animation ────────────────────────────
+
+    private void setupFabRotation() {
+        fabRotationAnim = ObjectAnimator.ofFloat(btnScan, "rotation", 0f, 360f);
+        fabRotationAnim.setDuration(3000);
+        fabRotationAnim.setInterpolator(new LinearInterpolator());
+        fabRotationAnim.setRepeatCount(ObjectAnimator.INFINITE);
     }
 
     @Override
     public void onBackPressed() {
         if (drawerLayout.isDrawerOpen(navView)) {
             drawerLayout.closeDrawer(navView);
+        } else if (showingAbout) {
+            showScanner();
         } else {
             super.onBackPressed();
         }

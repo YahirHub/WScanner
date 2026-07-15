@@ -6,11 +6,10 @@
             android:id="@+id/nav_scanner"
             android:icon="@drawable/ic_radar"
             android:title="Escáner" />
+        <item
+            android:id="@+id/nav_about"
+            android:icon="@drawable/ic_about"
+            android:title="Acerca de" />
     </group>
-
-    <item
-        android:id="@+id/nav_about"
-        android:icon="@drawable/ic_about"
-        android:title="Acerca de" />
 
 </menu>

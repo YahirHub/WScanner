@@ -4,6 +4,7 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
@@ -125,6 +126,22 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.Holder> {
 
         typeCol.addView(txtType);
 
+        // ── Premium: Press state scale animation ──
+        card.setOnTouchListener((v, event) -> {
+            switch (event.getAction()) {
+                case MotionEvent.ACTION_DOWN:
+                    v.animate().scaleX(0.96f).scaleY(0.96f).setDuration(80).start();
+                    return false;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    v.animate().scaleX(1f).scaleY(1f).setDuration(120)
+                            .setInterpolator(new android.view.animation.OvershootInterpolator(1.2f))
+                            .start();
+                    return false;
+            }
+            return false;
+        });
+
         card.addView(iconContainer);
         card.addView(rightCol);
         card.addView(typeCol);
@@ -176,13 +193,26 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.Holder> {
             h.txtType.setVisibility(View.GONE);
         }
 
-        // Tap to copy IP
+        // ── Premium: Fade-in animation on bind ──
+        h.itemView.setAlpha(0f);
+        h.itemView.setTranslationY(20f);
+        h.itemView.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setDuration(350)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                .start();
+
+        // Tap to copy IP with haptic feedback
         h.itemView.setOnClickListener(v -> {
             ClipboardManager clipboard = (ClipboardManager)
                     v.getContext().getSystemService(Context.CLIPBOARD_SERVICE);
             ClipData clip = ClipData.newPlainText("IP", d.ip);
             clipboard.setPrimaryClip(clip);
             Toast.makeText(v.getContext(), d.ip + " copiado", Toast.LENGTH_SHORT).show();
+
+            // Premium: haptic feedback on copy
+            HapticUtil.performClick(v);
         });
     }
 
