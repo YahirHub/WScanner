@@ -1,8 +1,12 @@
 package com.thowilabs.wscanner;
 
+import android.animation.ObjectAnimator;
+import android.animation.StateListAnimator;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.res.TypedArray;
+import android.graphics.drawable.Drawable;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -182,6 +186,23 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.Holder>
 
         typeCol.addView(txtType);
 
+        // ── Premium: Ripple touch feedback ──
+        int[] attrs = new int[]{android.R.attr.selectableItemBackground};
+        TypedArray ta = ctx.obtainStyledAttributes(attrs);
+        Drawable ripple = ta.getDrawable(0);
+        ta.recycle();
+        if (ripple != null) {
+            card.setForeground(ripple);
+        }
+
+        // ── Premium: StateListAnimator for elevation on press ──
+        StateListAnimator sla = new StateListAnimator();
+        sla.addState(new int[]{android.R.attr.state_pressed},
+                ObjectAnimator.ofFloat(card, "elevation", dp(2, ctx), dp(8, ctx)).setDuration(120));
+        sla.addState(new int[]{},
+                ObjectAnimator.ofFloat(card, "elevation", dp(8, ctx), dp(2, ctx)).setDuration(200));
+        card.setStateListAnimator(sla);
+
         // ── Premium: Press state scale animation ──
         card.setOnTouchListener((v, event) -> {
             switch (event.getAction()) {
@@ -249,13 +270,14 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.Holder>
             h.txtType.setVisibility(View.GONE);
         }
 
-        // ── Premium: Fade-in animation on bind ──
+        // ── Premium: Staggered fade-in + slide-up on bind ──
         h.itemView.setAlpha(0f);
         h.itemView.setTranslationY(20f);
         h.itemView.animate()
                 .alpha(1f)
                 .translationY(0f)
                 .setDuration(350)
+                .setStartDelay(Math.min(i * 40L, 300L))
                 .setInterpolator(new android.view.animation.DecelerateInterpolator())
                 .start();
 

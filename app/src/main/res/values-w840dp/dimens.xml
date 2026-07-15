@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Texto aún más grande para tablets grandes -->
+    <dimen name="text_size_name_card">18sp</dimen>
+    <dimen name="text_size_ip_card">14sp</dimen>
+    <dimen name="text_size_vendor_card">13sp</dimen>
+    <dimen name="text_size_method_card">12sp</dimen>
+    <dimen name="text_size_type_badge">12sp</dimen>
+
+    <!-- Padding horizontal ampliado -->
+    <dimen name="padding_screen_horizontal">32dp</dimen>
+    <dimen name="padding_card_horizontal">24dp</dimen>
+    <dimen name="padding_card_vertical">22dp</dimen>
+
+    <!-- Iconos más grandes -->
+    <dimen name="icon_size_device">56dp</dimen>
+    <dimen name="icon_padding_device">10dp</dimen>
+
+    <!-- Radio de tarjeta -->
+    <dimen name="card_corner_radius">18dp</dimen>
+
+    <!-- Ancho máximo de tarjeta -->
+    <dimen name="card_max_width">720dp</dimen>
+
+    <!-- Chips de ordenamiento -->
+    <dimen name="chip_text_size">14sp</dimen>
+    <dimen name="chip_padding_horizontal">18dp</dimen>
+    <dimen name="chip_padding_vertical">8dp</dimen>
+
+    <!-- Márgenes de tarjeta -->
+    <dimen name="card_margin_bottom">14dp</dimen>
+</resources>

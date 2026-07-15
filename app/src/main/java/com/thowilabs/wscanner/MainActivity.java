@@ -1,6 +1,7 @@
 package com.thowilabs.wscanner;
 
 import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
@@ -13,6 +14,8 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.LinearInterpolator;
 import android.view.inputmethod.InputMethodManager;
@@ -30,7 +33,11 @@ import androidx.appcompat.widget.Toolbar;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
+import androidx.transition.AutoTransition;
+import androidx.transition.Fade;
+import androidx.transition.Slide;
+import androidx.transition.TransitionManager;
+import androidx.transition.TransitionSet;
 
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.navigation.NavigationView;
@@ -59,8 +66,6 @@ public class MainActivity extends AppCompatActivity
     private TextView txtDeviceCount;
     private TextView txtGatewayValue;
     private LinearLayout layoutNetworkInfo;
-    private SwipeRefreshLayout swipeRefresh;
-
     // Premium: empty state & placeholders
     private View layoutEmpty;
     private View layoutPlaceholders;
@@ -83,6 +88,9 @@ public class MainActivity extends AppCompatActivity
 
     // Premium: FAB rotation animation
     private ObjectAnimator fabRotationAnim;
+
+    // Pulse animation for empty state radar
+    private ObjectAnimator emptyPulseAnim;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -114,7 +122,6 @@ public class MainActivity extends AppCompatActivity
         txtDeviceCount = findViewById(R.id.txtDeviceCount);
         txtGatewayValue = findViewById(R.id.txtGatewayValue);
         layoutNetworkInfo = (LinearLayout) findViewById(R.id.layoutNetworkInfo);
-        swipeRefresh = findViewById(R.id.swipeRefresh);
 
         // Premium: empty state & placeholders
         layoutEmpty = findViewById(R.id.layoutEmpty);
@@ -164,15 +171,14 @@ public class MainActivity extends AppCompatActivity
             return false;
         });
 
-        // Swipe to refresh
-        swipeRefresh.setOnRefreshListener(this::startScan);
-        swipeRefresh.setColorSchemeColors(0xFF00E5FF, 0xFF00B8D4, 0xFF3FB950);
-
         // Sort chip click handlers
         setupSortChips();
 
         // Premium: setup FAB rotation animation
         setupFabRotation();
+
+        // Premium: setup empty state pulse animation
+        setupEmptyPulse();
     }
 
     // ── Info de red ────────────────────────────────────────────────
@@ -275,10 +281,18 @@ public class MainActivity extends AppCompatActivity
         if (showingAbout || showingDeviceDetail) {
             showingAbout = false;
             showingDeviceDetail = false;
+            currentDetailDevice = null;
+
+            // Animación de transición: el contenido actual sale, scanner entra
+            ViewGroup root = findViewById(R.id.rootConstraint);
+            TransitionManager.beginDelayedTransition(root,
+                    new AutoTransition());
+
             layoutScannerContent.setVisibility(View.VISIBLE);
             btnScan.setVisibility(View.VISIBLE);
             layoutAbout.setVisibility(View.GONE);
             layoutDeviceDetail.setVisibility(View.GONE);
+
             navView.setCheckedItem(R.id.nav_scanner);
         }
     }
@@ -287,10 +301,20 @@ public class MainActivity extends AppCompatActivity
         if (showingAbout) return;
         showingAbout = true;
         showingDeviceDetail = false;
+        currentDetailDevice = null;
+
+        // Animación de transición: fade + slide
+        ViewGroup root = findViewById(R.id.rootConstraint);
+        TransitionSet set = new TransitionSet()
+                .addTransition(new Slide(android.view.Gravity.END))
+                .addTransition(new Fade())
+                .setDuration(350);
+        TransitionManager.beginDelayedTransition(root, set);
+
         layoutScannerContent.setVisibility(View.GONE);
         btnScan.setVisibility(View.GONE);
-        layoutAbout.setVisibility(View.VISIBLE);
         layoutDeviceDetail.setVisibility(View.GONE);
+        layoutAbout.setVisibility(View.VISIBLE);
         navView.setCheckedItem(R.id.nav_about);
     }
 
@@ -411,7 +435,6 @@ public class MainActivity extends AppCompatActivity
     private void setScanning(boolean scanning) {
         btnScan.setEnabled(!scanning);
         progressScan.setVisibility(scanning ? View.VISIBLE : View.GONE);
-        swipeRefresh.setRefreshing(scanning);
 
         // Premium: FAB rotation animation
         if (scanning) {
@@ -419,14 +442,20 @@ public class MainActivity extends AppCompatActivity
             txtStatus.setText("Iniciando escaneo…");
             txtDeviceCount.setText("…");
 
-            // Premium: show placeholders during scan
+            // Premium: show placeholders during scan with shimmer
             if (devices.isEmpty()) {
                 layoutPlaceholders.setVisibility(View.VISIBLE);
+                animatePlaceholders(layoutPlaceholders);
             }
 
             // Start FAB rotation
             if (fabRotationAnim != null && !fabRotationAnim.isRunning()) {
                 fabRotationAnim.start();
+            }
+
+            // Start empty state pulse
+            if (emptyPulseAnim != null && !emptyPulseAnim.isRunning()) {
+                emptyPulseAnim.start();
             }
         } else {
             // Stop FAB rotation with smooth finish
@@ -436,6 +465,11 @@ public class MainActivity extends AppCompatActivity
             btnScan.animate().rotation(0f).setDuration(300)
                     .setInterpolator(new DecelerateInterpolator())
                     .start();
+
+            // Stop pulse
+            if (emptyPulseAnim != null && emptyPulseAnim.isRunning()) {
+                emptyPulseAnim.cancel();
+            }
 
             // Hide placeholders
             layoutPlaceholders.setVisibility(View.GONE);
@@ -452,6 +486,14 @@ public class MainActivity extends AppCompatActivity
         showingDeviceDetail = true;
         showingAbout = false;
         currentDetailDevice = device;
+
+        // Animación de transición: slide desde la derecha
+        ViewGroup root = findViewById(R.id.rootConstraint);
+        TransitionSet set = new TransitionSet()
+                .addTransition(new Slide(android.view.Gravity.END))
+                .addTransition(new Fade())
+                .setDuration(300);
+        TransitionManager.beginDelayedTransition(root, set);
 
         layoutScannerContent.setVisibility(View.GONE);
         btnScan.setVisibility(View.GONE);
@@ -552,7 +594,10 @@ public class MainActivity extends AppCompatActivity
         }
 
         // Button: Back
-        findViewById(R.id.detailBtnBack).setOnClickListener(v -> showScanner());
+        findViewById(R.id.detailBtnBack).setOnClickListener(v -> {
+            // En tablet: solo ocultar detail (list sigue visible); en phone: volver a scanner
+            showScanner();
+        });
 
         // Button: Copy IP
         findViewById(R.id.detailBtnCopyIp).setOnClickListener(v -> {
@@ -698,6 +743,41 @@ public class MainActivity extends AppCompatActivity
                     .start();
         }
         // If already GONE, no action needed
+    }
+
+    // ── Premium: Empty State Pulse Animation ────────────────────────
+
+    private void setupEmptyPulse() {
+        View radarBg = findViewById(R.id.imgEmptyRadarBg);
+        if (radarBg == null) return;
+
+        emptyPulseAnim = ObjectAnimator.ofFloat(radarBg, "alpha", 0.3f, 0.7f);
+        emptyPulseAnim.setDuration(1500);
+        emptyPulseAnim.setInterpolator(new AccelerateDecelerateInterpolator());
+        emptyPulseAnim.setRepeatCount(ObjectAnimator.INFINITE);
+        emptyPulseAnim.setRepeatMode(ObjectAnimator.REVERSE);
+    }
+
+    // ── Premium: Placeholder Shimmer ──────────────────────────────
+
+    private void animatePlaceholders(View layoutPlaceholders) {
+        if (!(layoutPlaceholders instanceof ViewGroup)) return;
+        ViewGroup container = (ViewGroup) layoutPlaceholders;
+        for (int i = 0; i < container.getChildCount(); i++) {
+            View card = container.getChildAt(i);
+            // Pulsar alpha suavemente en cada card placeholder
+            card.setAlpha(0.4f);
+            card.animate()
+                    .alpha(0.7f)
+                    .setDuration(800 + (i * 150))
+                    .setInterpolator(new AccelerateDecelerateInterpolator())
+                    .withEndAction(() -> card.animate()
+                            .alpha(0.4f)
+                            .setDuration(800)
+                            .setInterpolator(new AccelerateDecelerateInterpolator())
+                            .start())
+                    .start();
+        }
     }
 
     // ── Premium: FAB Rotation Animation ────────────────────────────

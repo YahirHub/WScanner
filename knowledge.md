@@ -8,43 +8,45 @@ No ads, no analytics, no location/contacts/storage permissions.
 ## Key directories
 | Path | Purpose |
 |------|---------|
-| `app/src/main/java/com/thowilabs/wscanner/` | All Java source code |
-| `app/src/main/res/layout/` | XML layouts (DrawerLayout, RecyclerView, FAB) |
-| `app/src/main/res/values/` | Colors, strings, themes (dark cyber palette) |
-| `app/src/main/res/drawable/` | Vector icons, gradients, card backgrounds |
-| `app/src/main/res/menu/` | Navigation drawer menu |
+| `app/src/main/java/com/thowilabs/wscanner/` | All Java source code (9 active classes) |
+| `app/src/main/res/layout/` | XML layouts (phone + tablet qualifiers) |
+| `app/src/main/res/layout-sw600dp/` | Tablet 7" alternative layouts |
+| `app/src/main/res/layout-w840dp/` | Tablet 10" / landscape alternative layouts |
+| `app/src/main/res/anim/` | Animation XML resources (8 files) |
+| `app/src/main/res/values/` | Colors, strings, themes, dimens |
+| `app/src/main/res/values-sw600dp/` | Dimension overrides for 7" tablets |
+| `app/src/main/res/values-w840dp/` | Dimension overrides for 10" tablets |
+| `app/src/main/res/drawable/` | Vector icons, gradients, card backgrounds (17 files) |
+| `app/src/main/res/menu/` | Navigation drawer + toolbar search menu |
 | `app/src/main/assets/` | OUI vendor database (`oui_database.json`, 53k entries) |
-| `contexto/` | Architecture decision records (in Spanish) |
+| `contexto/` | Architecture decision records (Spanish) |
 
-## Source files
+## Source files (9 active)
 | File | Role |
 |------|------|
-| `MainActivity.java` | UI: DrawerLayout, RecyclerView, SwipeRefreshLayout, FAB, scan orchestration |
-| `NetworkScanner.java` | Orchestrator: ping sweep → mDNS → SSDP → ARP → port scan → HTTP → NetBIOS |
-| `MdnsDiscovery.java` | mDNS/DNS-SD (RFC 6762) — service discovery + reverse lookup |
-| `SsdpDiscovery.java` | SSDP M-SEARCH over multicast |
-| `NetBiosDiscovery.java` | NetBIOS NBNS (UDP port 137) |
-| `ArpReader.java` | ARP table reader (14 fallback methods) |
-| `VendorResolver.java` | OUI → vendor name lookup (53,371 entries) |
-| `Device.java` | Device model (name, ip, mac, vendor, discoveryMethod, discoveryDetail) |
-| `DeviceAdapter.java` | RecyclerView adapter with Iconics vector icons |
+| `MainActivity.java` | UI, navigation, scan orchestration, transitions, search, sort chips, device detail, ping, haptics, pulse/shimmer animations |
+| `NetworkScanner.java` | Orchestrator: ping sweep → mDNS → SSDP → ARP → port scan (15 ports) → HTTP → NetBIOS |
+| `MdnsDiscovery.java` | mDNS/DNS-SD (RFC 6762) — service discovery + reverse lookup, manual DNS binary construction |
+| `SsdpDiscovery.java` | SSDP M-SEARCH over multicast with scoring system for best device names |
+| `NetBiosDiscovery.java` | NetBIOS NBNS (UDP port 137) with half-ASCII encoding |
+| `VendorResolver.java` | OUI → vendor name lookup (53,371 entries from JSON) |
+| `Device.java` | Device model (name, ip, mac, vendor, discoveryMethod, discoveryDetail, ttl, openPorts, serviceNames) |
+| `DeviceAdapter.java` | RecyclerView adapter + Filterable + Iconics + ripple + StateListAnimator + staggered reveal |
+| `HapticUtil.java` | Haptic feedback cross-API (legacy Vibrator 24-25, performHapticFeedback 26+) |
 
 ## Build & run
 ```bash
-# Compile debug APK
-./gradlew assembleDebug
-
-# Install on connected device/emulator
-./gradlew installDebug
-
-# Open project in Android Studio (Hedgehog+ recommended)
+./gradlew :app:assembleDebug       # Compile debug APK
+./gradlew :app:installDebug        # Install on device
+./gradlew :app:lintDebug           # Run lint checks
+adb logcat WScanner.*:* *:S        # Diagnostic logs
 ```
 
 ## Tech stack
 | Layer | Choice |
 |-------|--------|
 | Language | Java 11 (no Kotlin in production code) |
-| UI | Material Design 3, CoordinatorLayout, RecyclerView |
+| UI | XML Views: ConstraintLayout, CoordinatorLayout, RecyclerView, Material Components |
 | Icons | Mikepenz Iconics 5.5 + Community Material Typeface 7.0.96.1 |
 | Network | Pure `java.net` — MulticastSocket, DatagramSocket, HttpURLConnection |
 | Protocols | ICMP, mDNS/DNS-SD, SSDP, NetBIOS (NBNS), HTTP |
@@ -53,13 +55,19 @@ No ads, no analytics, no location/contacts/storage permissions.
 | Target SDK | 36 (Android 15) |
 
 ## Key conventions & gotchas
-- **Java only** — all production code is Java 11, not Kotlin (only 2 test stubs are .kt)
-- **No external network libraries** — mDNS, SSDP, NetBIOS all implemented from scratch with `java.net`
-- **ARP is unreliable on Android 10+** — `ArpReader` tries 14 methods but usually returns empty
-- **MulticastLock required** — `NetworkScanner` acquires/releases a `WifiManager.MulticastLock` for mDNS/SSDP
-- **Progressive discovery** — devices appear in real-time; later phases (mDNS/SSDP) may update existing entries via `ipIndex` map
-- **Dark theme only** — `values-night/themes.xml` is identical to `values/themes.xml` (always dark)
-- **Color palette**: dark cyber — bg `#0D1117`, accent cyan `#00E5FF`, text `#E6EDF3`, green `#3FB950`
+- **Java only** — all production code is Java 11, not Kotlin
+- **No Fragments** — single Activity with embedded views + visibility toggling
+- **No external network libraries** — mDNS, SSDP, NetBIOS implemented from scratch
+- **ARP unreliable on Android 10+** — 14 methods tried, always returns empty due to SELinux
+- **MulticastLock required** — acquired at scan start, released at end
+- **Progressive discovery** — devices appear in real-time; later phases update existing entries via `ipIndex` map
+- **Dark theme only** — `values-night/themes.xml` identical to day (always dark)
 - **Device source priority**: mDNS (7) > SSDP (6) > NetBIOS (5) > OUI DB (4) > DNS (3) > HTTP (2) > Heurística (1)
-- **Iconics AAR dependency** uses `@aar` classifier on community-material-typeface
-- **Permissions**: INTERNET, ACCESS_NETWORK_STATE, ACCESS_WIFI_STATE, CHANGE_WIFI_MULTICAST_STATE — no location
+- **15 probed ports**: 80, 443, 22, 445, 8080, 23, 21, 554, 1883, 53, 3389, 5900, 5000, 5353, 9100
+- **Responsive layouts**: `layout-sw600dp` (7" tablet, 40/60 split), `layout-w840dp` (10", 35/65 split)
+- **Screen transitions**: `TransitionManager.beginDelayedTransition()` with Fade + Slide
+- **Permissions**: INTERNET, ACCESS_NETWORK_STATE, ACCESS_WIFI_STATE, CHANGE_WIFI_MULTICAST_STATE
+
+## Files intentionally removed
+- `ArpReader.java` — duplicate code, functionality in NetworkScanner
+- `SwipeRefreshLayout` dependency and layout — replaced by FAB-only scan trigger

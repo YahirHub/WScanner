@@ -13,6 +13,12 @@
         <item name="colorOnSurface">@color/text_primary</item>
         <item name="colorError">@color/status_error</item>
         <item name="colorOnError">@color/white</item>
+
+        <!-- Transiciones entre pantallas -->
+        <item name="android:windowContentTransitions">true</item>
+        <item name="android:windowAllowEnterTransitionOverlap">false</item>
+        <item name="android:windowAllowReturnTransitionOverlap">false</item>
+
         <item name="android:statusBarColor">@color/bg_primary</item>
         <item name="android:navigationBarColor">@color/bg_primary</item>
         <item name="android:windowLightStatusBar">false</item>

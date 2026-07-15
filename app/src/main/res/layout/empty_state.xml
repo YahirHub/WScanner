@@ -8,13 +8,14 @@
     android:padding="48dp"
     android:visibility="visible">
 
-    <!-- Radar icon container with subtle background circle -->
+    <!-- Radar icon container with subtle background circle + pulse animation -->
     <FrameLayout
         android:layout_width="96dp"
         android:layout_height="96dp"
         android:layout_marginBottom="24dp">
 
         <View
+            android:id="@+id/imgEmptyRadarBg"
             android:layout_width="96dp"
             android:layout_height="96dp"
             android:background="@drawable/circle_radar_bg" />
@@ -43,7 +44,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Conectado a tu red WiFi. Presiona el botón Escanear o desliza hacia abajo para descubrir todos los dispositivos conectados."
+        android:text="Presiona el botón Escanear para descubrir dispositivos conectados a tu red WiFi."
         android:textColor="#FF8B949E"
         android:textSize="14sp"
         android:gravity="center_horizontal"

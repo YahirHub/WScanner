@@ -13,17 +13,21 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
-        <LinearLayout
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/rootConstraint"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:orientation="vertical">
+            android:layout_height="match_parent">
 
             <!-- Toolbar -->
             <com.google.android.material.appbar.AppBarLayout
-                android:layout_width="match_parent"
+                android:id="@+id/appBar"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:background="@color/bg_secondary"
-                app:elevation="0dp">
+                app:elevation="0dp"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent">
 
                 <androidx.appcompat.widget.Toolbar
                     android:id="@+id/toolbar"
@@ -47,212 +51,238 @@
 
             </com.google.android.material.appbar.AppBarLayout>
 
-            <!-- ═══ Scanner Content (show/hide with about) ═══ -->
-            <LinearLayout
+            <!-- ═══ Scanner Content (show/hide with about/detail) ═══ -->
+            <androidx.constraintlayout.widget.ConstraintLayout
                 android:id="@+id/layoutScannerContent"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:orientation="vertical"
-                android:visibility="visible">
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="visible"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/appBar"
+                app:layout_constraintBottom_toBottomOf="parent">
 
-            <!-- Header de información de red -->
-            <LinearLayout
-                android:id="@+id/layoutNetworkInfo"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:background="@drawable/gradient_dark"
-                android:padding="16dp"
-                android:gravity="center_vertical"
-                android:visibility="gone">
-
+                <!-- Header de información de red -->
                 <LinearLayout
+                    android:id="@+id/layoutNetworkInfo"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
+                    android:orientation="horizontal"
+                    android:background="@drawable/gradient_dark"
+                    android:padding="16dp"
+                    android:gravity="center_vertical"
+                    android:visibility="gone"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toTopOf="parent">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/txtSubnet"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="#FF8B949E"
+                            android:textSize="11sp"
+                            android:letterSpacing="0.06"
+                            android:fontFamily="sans-serif-medium"
+                            android:text="SUBRED" />
+
+                        <TextView
+                            android:id="@+id/txtSubnetValue"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="#FF00E5FF"
+                            android:textSize="14sp"
+                            android:fontFamily="sans-serif-medium"
+                            android:text="—"
+                            android:layout_marginTop="2dp" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:gravity="center">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="#FF8B949E"
+                            android:textSize="11sp"
+                            android:letterSpacing="0.06"
+                            android:fontFamily="sans-serif-medium"
+                            android:text="DISPOSITIVOS" />
+
+                        <TextView
+                            android:id="@+id/txtDeviceCount"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="#FF3FB950"
+                            android:textSize="24sp"
+                            android:textStyle="bold"
+                            android:fontFamily="sans-serif-medium"
+                            android:text="0"
+                            android:layout_marginTop="2dp" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:gravity="end">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="#FF8B949E"
+                            android:textSize="11sp"
+                            android:letterSpacing="0.06"
+                            android:fontFamily="sans-serif-medium"
+                            android:text="GATEWAY" />
+
+                        <TextView
+                            android:id="@+id/txtGatewayValue"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="#FFE6EDF3"
+                            android:textSize="14sp"
+                            android:fontFamily="sans-serif-medium"
+                            android:text="—"
+                            android:layout_marginTop="2dp" />
+                    </LinearLayout>
+
+                </LinearLayout>
+
+                <!-- Separator 1 -->
+                <View
+                    android:id="@+id/divider1"
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:background="@color/divider"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toBottomOf="@id/layoutNetworkInfo" />
+
+                <!-- Sort chips row -->
+                <LinearLayout
+                    android:id="@+id/layoutSortChips"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:padding="10dp"
+                    android:gravity="center"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toBottomOf="@id/divider1">
 
                     <TextView
-                        android:id="@+id/txtSubnet"
+                        android:id="@+id/chipSortIp"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:textColor="#FF8B949E"
-                        android:textSize="11sp"
-                        android:letterSpacing="0.06"
-                        android:fontFamily="sans-serif-medium"
-                        android:text="SUBRED" />
-
-                    <TextView
-                        android:id="@+id/txtSubnetValue"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
+                        android:text="IP"
                         android:textColor="#FF00E5FF"
-                        android:textSize="14sp"
+                        android:textSize="11sp"
                         android:fontFamily="sans-serif-medium"
-                        android:text="—"
-                        android:layout_marginTop="2dp" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:gravity="center">
+                        android:paddingHorizontal="12dp"
+                        android:paddingVertical="5dp"
+                        android:layout_marginEnd="8dp"
+                        android:background="@drawable/badge_empty_hint"
+                        android:clickable="true"
+                        android:focusable="true" />
 
                     <TextView
+                        android:id="@+id/chipSortName"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:text="Nombre"
                         android:textColor="#FF8B949E"
                         android:textSize="11sp"
-                        android:letterSpacing="0.06"
                         android:fontFamily="sans-serif-medium"
-                        android:text="DISPOSITIVOS" />
+                        android:paddingHorizontal="12dp"
+                        android:paddingVertical="5dp"
+                        android:layout_marginEnd="8dp"
+                        android:clickable="true"
+                        android:focusable="true" />
 
                     <TextView
-                        android:id="@+id/txtDeviceCount"
+                        android:id="@+id/chipSortVendor"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:textColor="#FF3FB950"
-                        android:textSize="24sp"
-                        android:textStyle="bold"
-                        android:fontFamily="sans-serif-medium"
-                        android:text="0"
-                        android:layout_marginTop="2dp" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:gravity="end">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
+                        android:text="Vendor"
                         android:textColor="#FF8B949E"
                         android:textSize="11sp"
-                        android:letterSpacing="0.06"
                         android:fontFamily="sans-serif-medium"
-                        android:text="GATEWAY" />
+                        android:paddingHorizontal="12dp"
+                        android:paddingVertical="5dp"
+                        android:layout_marginEnd="8dp"
+                        android:clickable="true"
+                        android:focusable="true" />
 
                     <TextView
-                        android:id="@+id/txtGatewayValue"
+                        android:id="@+id/chipSortMethod"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:textColor="#FFE6EDF3"
-                        android:textSize="14sp"
+                        android:text="Método"
+                        android:textColor="#FF8B949E"
+                        android:textSize="11sp"
                         android:fontFamily="sans-serif-medium"
-                        android:text="—"
-                        android:layout_marginTop="2dp" />
+                        android:paddingHorizontal="12dp"
+                        android:paddingVertical="5dp"
+                        android:clickable="true"
+                        android:focusable="true" />
+
                 </LinearLayout>
 
-            </LinearLayout>
+                <!-- Separator 2 -->
+                <View
+                    android:id="@+id/divider2"
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:background="@color/divider"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toBottomOf="@id/layoutSortChips" />
 
-            <!-- Separator -->
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="@color/divider" />
-
-            <!-- Sort chips row -->
-            <LinearLayout
-                android:id="@+id/layoutSortChips"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:padding="10dp"
-                android:gravity="center">
-
+                <!-- Status text -->
                 <TextView
-                    android:id="@+id/chipSortIp"
-                    android:layout_width="wrap_content"
+                    android:id="@+id/txtStatus"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:text="IP"
-                    android:textColor="#FF00E5FF"
-                    android:textSize="11sp"
-                    android:fontFamily="sans-serif-medium"
-                    android:paddingHorizontal="12dp"
-                    android:paddingVertical="5dp"
-                    android:layout_marginEnd="8dp"
-                    android:background="@drawable/badge_empty_hint"
-                    android:clickable="true"
-                    android:focusable="true" />
+                    android:text="Presiona Escanear para buscar dispositivos"
+                    android:textSize="13sp"
+                    android:textColor="#FF6E7681"
+                    android:padding="16dp"
+                    android:gravity="center"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toBottomOf="@id/divider2" />
 
-                <TextView
-                    android:id="@+id/chipSortName"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Nombre"
-                    android:textColor="#FF8B949E"
-                    android:textSize="11sp"
-                    android:fontFamily="sans-serif-medium"
-                    android:paddingHorizontal="12dp"
-                    android:paddingVertical="5dp"
-                    android:layout_marginEnd="8dp"
-                    android:clickable="true"
-                    android:focusable="true" />
+                <!-- Separator 3 -->
+                <View
+                    android:id="@+id/divider3"
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:background="@color/divider"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toBottomOf="@id/txtStatus" />
 
-                <TextView
-                    android:id="@+id/chipSortVendor"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Vendor"
-                    android:textColor="#FF8B949E"
-                    android:textSize="11sp"
-                    android:fontFamily="sans-serif-medium"
-                    android:paddingHorizontal="12dp"
-                    android:paddingVertical="5dp"
-                    android:layout_marginEnd="8dp"
-                    android:clickable="true"
-                    android:focusable="true" />
-
-                <TextView
-                    android:id="@+id/chipSortMethod"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Método"
-                    android:textColor="#FF8B949E"
-                    android:textSize="11sp"
-                    android:fontFamily="sans-serif-medium"
-                    android:paddingHorizontal="12dp"
-                    android:paddingVertical="5dp"
-                    android:clickable="true"
-                    android:focusable="true" />
-
-            </LinearLayout>
-
-            <!-- Separator -->
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="@color/divider" />
-            <TextView
-                android:id="@+id/txtStatus"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Presiona Escanear para buscar dispositivos"
-                android:textSize="13sp"
-                android:textColor="#FF6E7681"
-                android:padding="16dp"
-                android:gravity="center" />
-
-            <!-- Separator -->
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="@color/divider" />
-
-            <!-- Device list con swipe refresh -->
-            <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-                android:id="@+id/swipeRefresh"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent">
-
+                <!-- Device list area -->
                 <FrameLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent">
+                    android:id="@+id/listContainer"
+                    android:layout_width="0dp"
+                    android:layout_height="0dp"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toBottomOf="@id/divider3"
+                    app:layout_constraintBottom_toBottomOf="parent">
 
                     <androidx.recyclerview.widget.RecyclerView
                         android:id="@+id/listDevices"
@@ -270,213 +300,36 @@
 
                 </FrameLayout>
 
-            </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
-
-            </LinearLayout><!-- /layoutScannerContent -->
+            </androidx.constraintlayout.widget.ConstraintLayout>
 
             <!-- ═══ Device Detail content (shown on card tap) ═══ -->
-            <include layout="@layout/layout_device_detail" />
+            <include
+                android:id="@+id/layoutDeviceDetail"
+                layout="@layout/layout_device_detail"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/appBar"
+                app:layout_constraintBottom_toBottomOf="parent" />
 
             <!-- ═══ Acerca de content (shown/hidden via nav drawer) ═══ -->
             <ScrollView
                 android:id="@+id/layoutAbout"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
                 android:padding="24dp"
-                android:visibility="gone">
+                android:visibility="gone"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/appBar"
+                app:layout_constraintBottom_toBottomOf="parent">
 
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:gravity="center_horizontal">
-
-                    <!-- App icon container -->
-                    <FrameLayout
-                        android:layout_width="88dp"
-                        android:layout_height="88dp"
-                        android:layout_marginTop="24dp"
-                        android:layout_marginBottom="16dp">
-
-                        <View
-                            android:layout_width="88dp"
-                            android:layout_height="88dp"
-                            android:background="@drawable/circle_radar_bg" />
-
-                        <ImageView
-                            android:layout_width="52dp"
-                            android:layout_height="52dp"
-                            android:layout_gravity="center"
-                            android:src="@drawable/ic_radar"
-                            android:alpha="0.7" />
-                    </FrameLayout>
-
-                    <!-- App name -->
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="WScanner"
-                        android:textColor="#FF00E5FF"
-                        android:textSize="28sp"
-                        android:textStyle="bold"
-                        android:letterSpacing="0.05"
-                        android:fontFamily="sans-serif-medium" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Network Scanner"
-                        android:textColor="#FF8B949E"
-                        android:textSize="13sp"
-                        android:letterSpacing="0.08"
-                        android:fontFamily="sans-serif-medium"
-                        android:layout_marginTop="4dp" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="v1.0"
-                        android:textColor="#FF6E7681"
-                        android:textSize="12sp"
-                        android:layout_marginTop="2dp"
-                        android:layout_marginBottom="32dp" />
-
-                    <View
-                        android:layout_width="48dp"
-                        android:layout_height="2dp"
-                        android:background="#FF00E5FF"
-                        android:layout_marginBottom="24dp" />
-
-                    <!-- Description card -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:background="@drawable/card_bg_about"
-                        android:padding="20dp"
-                        android:layout_marginBottom="16dp">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="DESCRIPCIÓN"
-                            android:textColor="#FF8B949E"
-                            android:textSize="10sp"
-                            android:letterSpacing="0.1"
-                            android:fontFamily="sans-serif-medium"
-                            android:layout_marginBottom="8dp" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Escáner de red local gratuito. Descubre todos los dispositivos conectados a tu red WiFi con un motor de escaneo multicapa: ping, mDNS (Bonjour), SSDP (UPnP), NetBIOS, HTTP fingerprinting y más."
-                            android:textColor="#FFE6EDF3"
-                            android:textSize="14sp"
-                            android:lineSpacingExtra="4sp"
-                            android:fontFamily="sans-serif" />
-                    </LinearLayout>
-
-                    <!-- Features card -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:background="@drawable/card_bg_about"
-                        android:padding="20dp"
-                        android:layout_marginBottom="16dp">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="CARACTERÍSTICAS"
-                            android:textColor="#FF8B949E"
-                            android:textSize="10sp"
-                            android:letterSpacing="0.1"
-                            android:fontFamily="sans-serif-medium"
-                            android:layout_marginBottom="12dp" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="🔍  Descubrimiento multicapa"
-                            android:textColor="#FFE6EDF3"
-                            android:textSize="13sp"
-                            android:layout_marginBottom="6dp" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="⚡  Reporte progresivo en tiempo real"
-                            android:textColor="#FFE6EDF3"
-                            android:textSize="13sp"
-                            android:layout_marginBottom="6dp" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="🏷️  Nombres inteligentes de dispositivos"
-                            android:textColor="#FFE6EDF3"
-                            android:textSize="13sp"
-                            android:layout_marginBottom="6dp" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="🔒  Sin anuncios · Sin rastreo · 100% offline"
-                            android:textColor="#FFE6EDF3"
-                            android:textSize="13sp" />
-                    </LinearLayout>
-
-                    <!-- Developer card -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:background="@drawable/card_bg_about"
-                        android:padding="20dp"
-                        android:layout_marginBottom="24dp">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="DESARROLLADOR"
-                            android:textColor="#FF8B949E"
-                            android:textSize="10sp"
-                            android:letterSpacing="0.1"
-                            android:fontFamily="sans-serif-medium"
-                            android:layout_marginBottom="8dp" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Thowilabs"
-                            android:textColor="#FF00E5FF"
-                            android:textSize="15sp"
-                            android:textStyle="bold"
-                            android:fontFamily="sans-serif-medium" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="thowilabs.com"
-                            android:textColor="#FF8B949E"
-                            android:textSize="12sp"
-                            android:layout_marginTop="2dp" />
-                    </LinearLayout>
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Una alternativa gratuita, sin anuncios ni rastreo."
-                        android:textColor="#FF6E7681"
-                        android:textSize="11sp"
-                        android:gravity="center_horizontal"
-                        android:layout_marginBottom="32dp" />
-
-                </LinearLayout>
+                <include layout="@layout/about_content" />
             </ScrollView>
 
-        </LinearLayout>
+        </androidx.constraintlayout.widget.ConstraintLayout>
 
         <!-- FAB de escaneo -->
         <com.google.android.material.floatingactionbutton.FloatingActionButton
