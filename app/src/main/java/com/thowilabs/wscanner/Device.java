@@ -14,6 +14,7 @@ public class Device {
     public int ttl = -1;            // TTL del ping (-1 = no disponible, requiere raw sockets)
     public List<Integer> openPorts = new ArrayList<>();
     public List<String> serviceNames = new ArrayList<>();
+    public boolean online = true;       // false = visto antes, ya no responde
 
     public Device(String name, String ip, String mac, String vendor) {
         this(name, ip, mac, vendor, "Heurística", null);

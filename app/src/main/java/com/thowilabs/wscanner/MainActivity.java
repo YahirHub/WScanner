@@ -10,6 +10,8 @@ import android.net.Uri;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -92,6 +94,13 @@ public class MainActivity extends AppCompatActivity
     // Pulse animation for empty state radar
     private ObjectAnimator emptyPulseAnim;
 
+    // Active scan mode (monitoreo continuo)
+    private NetworkScanner networkScanner;
+    private boolean activeScanMode = false;
+    private int activeScanCycle = 0;
+    private Handler activeScanHandler;
+    private TextView chipMonitor;
+
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
@@ -141,6 +150,15 @@ public class MainActivity extends AppCompatActivity
         chipSortVendor = findViewById(R.id.chipSortVendor);
         chipSortMethod = findViewById(R.id.chipSortMethod);
 
+        // Monitor chip
+        chipMonitor = findViewById(R.id.chipMonitor);
+        if (chipMonitor != null) {
+            chipMonitor.setOnClickListener(v -> {
+                HapticUtil.performClick(chipMonitor);
+                toggleActiveScan();
+            });
+        }
+
         // RecyclerView
         RecyclerView rv = findViewById(R.id.listDevices);
         rv.setLayoutManager(new LinearLayoutManager(this));
@@ -154,7 +172,11 @@ public class MainActivity extends AppCompatActivity
         // FAB click with haptic feedback
         btnScan.setOnClickListener(v -> {
             HapticUtil.performConfirm(btnScan);
-            startScan();
+            if (activeScanMode) {
+                stopActiveScan();
+            } else {
+                startScan();
+            }
         });
 
         // FAB press state animation
@@ -179,6 +201,10 @@ public class MainActivity extends AppCompatActivity
 
         // Premium: setup empty state pulse animation
         setupEmptyPulse();
+
+        // Active scan infrastructure
+        networkScanner = new NetworkScanner();
+        activeScanHandler = new Handler(Looper.getMainLooper());
     }
 
     // ── Info de red ────────────────────────────────────────────────
@@ -321,17 +347,24 @@ public class MainActivity extends AppCompatActivity
     // ── Escaneo ────────────────────────────────────────────────────
 
     private void startScan() {
-        Log.i(TAG, "🧹 Limpiando lista previa (" + devices.size() + " dispositivos)");
-        hasScannedBefore = true;
-        devices.clear();
-        ipIndex.clear();
-        adapter.notifyDataSetChanged();
-        updateNetworkInfo();
+        if (activeScanCycle == 0) {
+            // First scan (or manual): full clear
+            Log.i(TAG, "🧹 Limpiando lista previa (" + devices.size() + " dispositivos)");
+            hasScannedBefore = true;
+            devices.clear();
+            ipIndex.clear();
+            adapter.notifyDataSetChanged();
+        } else {
+            // Active mode continuation: mark all as pending
+            Log.i(TAG, "🔄 Ciclo " + activeScanCycle + " — " + devices.size() + " dispositivos en lista");
+            markAllPending();
+        }
 
+        updateNetworkInfo();
         setScanning(true);
         Log.i(TAG, "🚀 Iniciando NetworkScanner...");
 
-        new NetworkScanner().scan(this, new NetworkScanner.Callback() {
+        networkScanner.scan(this, new NetworkScanner.Callback() {
             @Override
             public void onDeviceFound(Device device) {
                 runOnUiThread(() -> {
@@ -339,6 +372,7 @@ public class MainActivity extends AppCompatActivity
 
                     if (existingIdx != null) {
                         Device existing = devices.get(existingIdx);
+                        existing.online = true;  // Re-discovered in this cycle
 
                         // Merge complementary info (ports, mac) always
                         if (!device.openPorts.isEmpty()) {
@@ -358,15 +392,15 @@ public class MainActivity extends AppCompatActivity
                             existing.mac = device.mac;
                             existing.discoveryMethod = device.discoveryMethod;
                             existing.discoveryDetail = device.discoveryDetail;
-                            adapter.notifyItemChanged(existingIdx);
-                            Log.d(TAG, "🔄 Actualizado: " + device.ip
-                                    + " → \"" + device.name + "\" (" + device.discoveryMethod + ")");
-                        } else if (!device.openPorts.isEmpty()) {
-                            // Only ports updated, still need to refresh UI
-                            adapter.notifyItemChanged(existingIdx);
                         }
+
+                        // Always refresh when re-discovered (online status, ports, etc.)
+                        adapter.notifyItemChanged(existingIdx);
+                        Log.d(TAG, "🔄 Actualizado: " + device.ip
+                                + " → \"" + existing.name + "\" (" + existing.discoveryMethod + ", online=" + existing.online + ")");
                     } else {
                         // Nuevo dispositivo
+                        device.online = true;  // Fresh discovery
                         devices.add(device);
                         int idx = devices.size() - 1;
                         ipIndex.put(device.ip, idx);
@@ -405,6 +439,17 @@ public class MainActivity extends AppCompatActivity
                     // Premium: haptic feedback on scan complete
                     HapticUtil.performHeavy(btnScan);
 
+                    // Active mode: schedule next scan
+                    if (activeScanMode) {
+                        activeScanHandler.postDelayed(() -> {
+                            if (activeScanMode) {
+                                activeScanCycle++;
+                                startScan();
+                            }
+                        }, 5000);
+                        updateMonitorChipStyle();
+                    }
+
                     // updateEmptyState() is already called inside setScanning()
                 });
             }
@@ -429,6 +474,51 @@ public class MainActivity extends AppCompatActivity
             case "DNS":      return 3;
             case "HTTP":     return 2;
             default:         return 1;  // Heurística
+        }
+    }
+
+    // ── Active Scan Mode ─────────────────────────────────────────
+
+    private void toggleActiveScan() {
+        if (activeScanMode) {
+            stopActiveScan();
+        } else {
+            activeScanMode = true;
+            activeScanCycle = 0;
+            updateMonitorChipStyle();
+            startScan();
+        }
+    }
+
+    private void stopActiveScan() {
+        activeScanMode = false;
+        activeScanCycle = 0;
+        activeScanHandler.removeCallbacks(null);
+        // Restaurar todos los dispositivos a online
+        for (Device d : devices) {
+            d.online = true;
+        }
+        adapter.notifyDataSetChanged();
+        updateMonitorChipStyle();
+    }
+
+    private void markAllPending() {
+        for (Device d : devices) {
+            d.online = false;
+        }
+        adapter.notifyDataSetChanged();
+    }
+
+    private void updateMonitorChipStyle() {
+        if (chipMonitor == null) return;
+        if (activeScanMode) {
+            chipMonitor.setTextColor(0xFFFFFFFF);
+            chipMonitor.setBackgroundResource(R.drawable.badge_online);
+            btnScan.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFFF85149));
+        } else {
+            chipMonitor.setTextColor(0xFF8B949E);
+            chipMonitor.setBackgroundResource(0);
+            btnScan.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFF00E5FF));
         }
     }
 
@@ -676,6 +766,11 @@ public class MainActivity extends AppCompatActivity
             currentSort = criteria;
             updateSortChipStyles();
             adapter.sortBy(criteria);
+            // Reconstruir ipIndex tras reordenar (crítico en modo monitoreo)
+            ipIndex.clear();
+            for (int i = 0; i < devices.size(); i++) {
+                ipIndex.put(devices.get(i).ip, i);
+            }
             HapticUtil.performClick(chipSortIp);
         };
 
@@ -798,5 +893,20 @@ public class MainActivity extends AppCompatActivity
         } else {
             super.onBackPressed();
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        // Limpiar antes de super para evitar callbacks durante teardown
+        if (activeScanHandler != null) {
+            activeScanHandler.removeCallbacksAndMessages(null);
+        }
+        if (fabRotationAnim != null && fabRotationAnim.isRunning()) {
+            fabRotationAnim.cancel();
+        }
+        if (emptyPulseAnim != null && emptyPulseAnim.isRunning()) {
+            emptyPulseAnim.cancel();
+        }
+        super.onDestroy();
     }
 }

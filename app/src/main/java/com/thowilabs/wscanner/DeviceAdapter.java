@@ -273,13 +273,25 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.Holder>
         // ── Premium: Staggered fade-in + slide-up on bind ──
         h.itemView.setAlpha(0f);
         h.itemView.setTranslationY(20f);
+        float targetAlpha = d.online ? 1f : 0.45f;
         h.itemView.animate()
-                .alpha(1f)
+                .alpha(targetAlpha)
                 .translationY(0f)
                 .setDuration(350)
                 .setStartDelay(Math.min(i * 40L, 300L))
                 .setInterpolator(new android.view.animation.DecelerateInterpolator())
                 .start();
+
+        // ── Online/offline badge ──
+        android.view.ViewGroup parent = (android.view.ViewGroup) h.iconView.getParent();
+        if (parent != null && parent.getChildCount() > 1) {
+            View badge = parent.getChildAt(1);
+            if (badge instanceof TextView) {
+                TextView badgeTv = (TextView) badge;
+                badgeTv.setTextColor(d.online ? 0xFF3FB950 : 0xFF6E7681);
+                badgeTv.setText(d.online ? "●" : "○");
+            }
+        }
 
         // Tap → device detail (or open browser / copy IP as fallback)
         h.itemView.setOnClickListener(v -> {
