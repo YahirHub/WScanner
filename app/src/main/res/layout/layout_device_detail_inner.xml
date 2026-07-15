@@ -316,7 +316,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="🌐  Abrir en navegador"
+                android:text="🌐  Abrir"
                 android:textColor="#FF00E5FF"
                 android:textSize="13sp"
                 android:fontFamily="sans-serif-medium"
@@ -327,7 +327,7 @@
                 android:background="@drawable/drawer_item_bg" />
 
             <View
-                android:layout_width="12dp"
+                android:layout_width="8dp"
                 android:layout_height="1dp" />
 
             <TextView
@@ -337,6 +337,52 @@
                 android:layout_weight="1"
                 android:text="📶  Ping"
                 android:textColor="#FF3FB950"
+                android:textSize="13sp"
+                android:fontFamily="sans-serif-medium"
+                android:gravity="center"
+                android:padding="12dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="@drawable/drawer_item_bg" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center">
+
+            <TextView
+                android:id="@+id/detailBtnWake"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="⚡  Wake"
+                android:textColor="#FFD29922"
+                android:textSize="13sp"
+                android:fontFamily="sans-serif-medium"
+                android:gravity="center"
+                android:padding="12dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:visibility="gone"
+                android:background="@drawable/drawer_item_bg" />
+
+            <View
+                android:layout_width="8dp"
+                android:layout_height="1dp" />
+
+            <TextView
+                android:id="@+id/detailBtnDnsLookup"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="🔍  DNS"
+                android:textColor="#FF00E5FF"
                 android:textSize="13sp"
                 android:fontFamily="sans-serif-medium"
                 android:gravity="center"

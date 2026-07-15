@@ -352,6 +352,18 @@
                 <include layout="@layout/about_content" />
             </ScrollView>
 
+            <!-- ═══ Speed Test view ═══ -->
+            <include
+                android:id="@+id/layoutSpeedTest"
+                layout="@layout/tool_speedtest"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/appBar"
+                app:layout_constraintBottom_toBottomOf="parent" />
+
         </androidx.constraintlayout.widget.ConstraintLayout>
 
         <!-- FAB de escaneo -->

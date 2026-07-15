@@ -1,11 +1,11 @@
 package com.thowilabs.wscanner;
 
 import android.animation.ObjectAnimator;
-import android.animation.ValueAnimator;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
@@ -74,15 +74,23 @@ public class MainActivity extends AppCompatActivity
     private TextView txtEmptyHint;
     private boolean hasScannedBefore = false;
 
-    // Acerca de view (embedded, no separate activity)
+    // Acerca de view
     private View layoutAbout;
     private View layoutScannerContent;
     private boolean showingAbout = false;
 
-    // Device detail view (embedded)
+    // Device detail view
     private View layoutDeviceDetail;
     private boolean showingDeviceDetail = false;
     private Device currentDetailDevice;
+
+    // Speed Test view
+    private View layoutSpeedTest;
+    private boolean showingSpeedTest = false;
+    private SpeedTestTool speedTestTool;
+
+    // Device labels
+    private SharedPreferences labelPrefs;
 
     // Sort chips
     private View chipSortIp, chipSortName, chipSortVendor, chipSortMethod;
@@ -143,6 +151,13 @@ public class MainActivity extends AppCompatActivity
 
         // Device detail view
         layoutDeviceDetail = findViewById(R.id.layoutDeviceDetail);
+
+        // Speed Test view
+        layoutSpeedTest = findViewById(R.id.layoutSpeedTest);
+        speedTestTool = new SpeedTestTool();
+
+        // Device labels
+        labelPrefs = getSharedPreferences("wscanner_labels", MODE_PRIVATE);
 
         // Sort chips
         chipSortIp = findViewById(R.id.chipSortIp);
@@ -255,6 +270,8 @@ public class MainActivity extends AppCompatActivity
 
         if (id == R.id.nav_scanner) {
             showScanner();
+        } else if (id == R.id.nav_speedtest) {
+            showSpeedTest();
         } else if (id == R.id.nav_about) {
             showAbout();
         }
@@ -304,32 +321,36 @@ public class MainActivity extends AppCompatActivity
     }
 
     private void showScanner() {
-        if (showingAbout || showingDeviceDetail) {
-            showingAbout = false;
-            showingDeviceDetail = false;
-            currentDetailDevice = null;
+        if (showingAbout || showingDeviceDetail || showingSpeedTest) {
+            hideAllViews();
 
-            // Animación de transición: el contenido actual sale, scanner entra
             ViewGroup root = findViewById(R.id.rootConstraint);
             TransitionManager.beginDelayedTransition(root,
                     new AutoTransition());
 
             layoutScannerContent.setVisibility(View.VISIBLE);
             btnScan.setVisibility(View.VISIBLE);
-            layoutAbout.setVisibility(View.GONE);
-            layoutDeviceDetail.setVisibility(View.GONE);
 
             navView.setCheckedItem(R.id.nav_scanner);
         }
     }
 
-    private void showAbout() {
-        if (showingAbout) return;
-        showingAbout = true;
+    private void hideAllViews() {
+        showingAbout = false;
         showingDeviceDetail = false;
+        showingSpeedTest = false;
         currentDetailDevice = null;
 
-        // Animación de transición: fade + slide
+        layoutAbout.setVisibility(View.GONE);
+        layoutDeviceDetail.setVisibility(View.GONE);
+        layoutSpeedTest.setVisibility(View.GONE);
+    }
+
+    private void showAbout() {
+        if (showingAbout) return;
+        hideAllViews();
+        showingAbout = true;
+
         ViewGroup root = findViewById(R.id.rootConstraint);
         TransitionSet set = new TransitionSet()
                 .addTransition(new Slide(android.view.Gravity.END))
@@ -339,7 +360,6 @@ public class MainActivity extends AppCompatActivity
 
         layoutScannerContent.setVisibility(View.GONE);
         btnScan.setVisibility(View.GONE);
-        layoutDeviceDetail.setVisibility(View.GONE);
         layoutAbout.setVisibility(View.VISIBLE);
         navView.setCheckedItem(R.id.nav_about);
     }
@@ -348,14 +368,12 @@ public class MainActivity extends AppCompatActivity
 
     private void startScan() {
         if (activeScanCycle == 0) {
-            // First scan (or manual): full clear
             Log.i(TAG, "🧹 Limpiando lista previa (" + devices.size() + " dispositivos)");
             hasScannedBefore = true;
             devices.clear();
             ipIndex.clear();
             adapter.notifyDataSetChanged();
         } else {
-            // Active mode continuation: mark all as pending
             Log.i(TAG, "🔄 Ciclo " + activeScanCycle + " — " + devices.size() + " dispositivos en lista");
             markAllPending();
         }
@@ -372,9 +390,9 @@ public class MainActivity extends AppCompatActivity
 
                     if (existingIdx != null) {
                         Device existing = devices.get(existingIdx);
-                        existing.online = true;  // Re-discovered in this cycle
+                        existing.online = true;
+                        existing.lastSeen = System.currentTimeMillis();
 
-                        // Merge complementary info (ports, mac) always
                         if (!device.openPorts.isEmpty()) {
                             existing.openPorts = device.openPorts;
                             existing.serviceNames = device.serviceNames;
@@ -385,7 +403,6 @@ public class MainActivity extends AppCompatActivity
                             existing.vendor = device.vendor;
                         }
 
-                        // Replace only if new source is better
                         if (isBetterSource(device.discoveryMethod, existing.discoveryMethod)) {
                             existing.name = device.name;
                             existing.vendor = device.vendor;
@@ -394,24 +411,20 @@ public class MainActivity extends AppCompatActivity
                             existing.discoveryDetail = device.discoveryDetail;
                         }
 
-                        // Always refresh when re-discovered (online status, ports, etc.)
                         adapter.notifyItemChanged(existingIdx);
-                        Log.d(TAG, "🔄 Actualizado: " + device.ip
-                                + " → \"" + existing.name + "\" (" + existing.discoveryMethod + ", online=" + existing.online + ")");
                     } else {
-                        // Nuevo dispositivo
-                        device.online = true;  // Fresh discovery
+                        device.online = true;
+                        device.lastSeen = System.currentTimeMillis();
+                        String label = labelPrefs.getString(device.ip, null);
+                        if (label != null && !label.isEmpty()) device.userLabel = label;
+
                         devices.add(device);
                         int idx = devices.size() - 1;
                         ipIndex.put(device.ip, idx);
                         adapter.notifyItemInserted(idx);
                         txtDeviceCount.setText(String.valueOf(devices.size()));
-                        Log.d(TAG, "➕ Device #" + devices.size() + ": "
-                                + device.ip + " → \"" + device.name
-                                + "\" [" + device.discoveryMethod + "]");
                     }
 
-                    // Premium: hide placeholders when first device appears
                     if (devices.size() == 1) {
                         layoutPlaceholders.setVisibility(View.GONE);
                     }
@@ -436,10 +449,8 @@ public class MainActivity extends AppCompatActivity
                     txtStatus.setText("Escaneo completo — " + totalFound + " dispositivo(s)");
                     txtDeviceCount.setText(String.valueOf(devices.size()));
 
-                    // Premium: haptic feedback on scan complete
                     HapticUtil.performHeavy(btnScan);
 
-                    // Active mode: schedule next scan
                     if (activeScanMode) {
                         activeScanHandler.postDelayed(() -> {
                             if (activeScanMode) {
@@ -449,17 +460,11 @@ public class MainActivity extends AppCompatActivity
                         }, 5000);
                         updateMonitorChipStyle();
                     }
-
-                    // updateEmptyState() is already called inside setScanning()
                 });
             }
         });
     }
 
-    /**
-     * Determina si source1 es una fuente "mejor" (más informativa) que source2.
-     * Prioridad: mDNS > SSDP > NetBIOS > OUI DB > DNS > HTTP > Heurística
-     */
     private boolean isBetterSource(String src1, String src2) {
         return sourceRank(src1) > sourceRank(src2);
     }
@@ -473,7 +478,7 @@ public class MainActivity extends AppCompatActivity
             case "OUI DB":   return 4;
             case "DNS":      return 3;
             case "HTTP":     return 2;
-            default:         return 1;  // Heurística
+            default:         return 1;
         }
     }
 
@@ -494,7 +499,6 @@ public class MainActivity extends AppCompatActivity
         activeScanMode = false;
         activeScanCycle = 0;
         activeScanHandler.removeCallbacks(null);
-        // Restaurar todos los dispositivos a online
         for (Device d : devices) {
             d.online = true;
         }
@@ -526,29 +530,24 @@ public class MainActivity extends AppCompatActivity
         btnScan.setEnabled(!scanning);
         progressScan.setVisibility(scanning ? View.VISIBLE : View.GONE);
 
-        // Premium: FAB rotation animation
         if (scanning) {
             progressScan.setProgress(0);
             txtStatus.setText("Iniciando escaneo…");
             txtDeviceCount.setText("…");
 
-            // Premium: show placeholders during scan with shimmer
             if (devices.isEmpty()) {
                 layoutPlaceholders.setVisibility(View.VISIBLE);
                 animatePlaceholders(layoutPlaceholders);
             }
 
-            // Start FAB rotation
             if (fabRotationAnim != null && !fabRotationAnim.isRunning()) {
                 fabRotationAnim.start();
             }
 
-            // Start empty state pulse
             if (emptyPulseAnim != null && !emptyPulseAnim.isRunning()) {
                 emptyPulseAnim.start();
             }
         } else {
-            // Stop FAB rotation with smooth finish
             if (fabRotationAnim != null && fabRotationAnim.isRunning()) {
                 fabRotationAnim.cancel();
             }
@@ -556,12 +555,10 @@ public class MainActivity extends AppCompatActivity
                     .setInterpolator(new DecelerateInterpolator())
                     .start();
 
-            // Stop pulse
             if (emptyPulseAnim != null && emptyPulseAnim.isRunning()) {
                 emptyPulseAnim.cancel();
             }
 
-            // Hide placeholders
             layoutPlaceholders.setVisibility(View.GONE);
         }
 
@@ -573,11 +570,10 @@ public class MainActivity extends AppCompatActivity
     private void showDeviceDetail(Device device) {
         if (showingDeviceDetail && currentDetailDevice == device) return;
 
+        hideAllViews();
         showingDeviceDetail = true;
-        showingAbout = false;
         currentDetailDevice = device;
 
-        // Animación de transición: slide desde la derecha
         ViewGroup root = findViewById(R.id.rootConstraint);
         TransitionSet set = new TransitionSet()
                 .addTransition(new Slide(android.view.Gravity.END))
@@ -587,7 +583,6 @@ public class MainActivity extends AppCompatActivity
 
         layoutScannerContent.setVisibility(View.GONE);
         btnScan.setVisibility(View.GONE);
-        layoutAbout.setVisibility(View.GONE);
         layoutDeviceDetail.setVisibility(View.VISIBLE);
 
         populateDeviceDetail(device);
@@ -605,9 +600,9 @@ public class MainActivity extends AppCompatActivity
         drawable.setSizeYPx(sizePx);
         iconView.setImageDrawable(drawable);
 
-        // Name
+        // Name (show userLabel if set)
         TextView nameView = findViewById(R.id.detailName);
-        nameView.setText(d.name);
+        nameView.setText(d.userLabel != null ? d.userLabel : d.name);
 
         // Method badge
         TextView badgeView = findViewById(R.id.detailMethodBadge);
@@ -684,10 +679,7 @@ public class MainActivity extends AppCompatActivity
         }
 
         // Button: Back
-        findViewById(R.id.detailBtnBack).setOnClickListener(v -> {
-            // En tablet: solo ocultar detail (list sigue visible); en phone: volver a scanner
-            showScanner();
-        });
+        findViewById(R.id.detailBtnBack).setOnClickListener(v -> showScanner());
 
         // Button: Copy IP
         findViewById(R.id.detailBtnCopyIp).setOnClickListener(v -> {
@@ -726,9 +718,7 @@ public class MainActivity extends AppCompatActivity
         });
 
         // Button: Ping
-        findViewById(R.id.detailBtnPing).setOnClickListener(v -> {
-            pingDevice(d.ip);
-        });
+        findViewById(R.id.detailBtnPing).setOnClickListener(v -> pingDevice(d.ip));
     }
 
     private void pingDevice(String ip) {
@@ -766,7 +756,6 @@ public class MainActivity extends AppCompatActivity
             currentSort = criteria;
             updateSortChipStyles();
             adapter.sortBy(criteria);
-            // Reconstruir ipIndex tras reordenar (crítico en modo monitoreo)
             ipIndex.clear();
             for (int i = 0; i < devices.size(); i++) {
                 ipIndex.put(devices.get(i).ip, i);
@@ -815,32 +804,63 @@ public class MainActivity extends AppCompatActivity
         return true;
     }
 
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == R.id.action_export) {
+            exportResults();
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
+    private void exportResults() {
+        if (devices.isEmpty()) {
+            Toast.makeText(this, "No hay dispositivos para exportar", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("WScanner — Resultados del escaneo\n");
+        sb.append("====================================\n\n");
+        for (Device d : devices) {
+            sb.append(d.name).append("\n");
+            sb.append("  IP: ").append(d.ip).append("\n");
+            if (d.mac != null && !d.mac.equals("N/A"))
+                sb.append("  MAC: ").append(d.mac.toUpperCase()).append("\n");
+            if (d.vendor != null && !d.vendor.equals("Desconocido"))
+                sb.append("  Fabricante: ").append(d.vendor).append("\n");
+            sb.append("  Método: ").append(d.discoveryMethod).append("\n");
+            if (!d.openPorts.isEmpty())
+                sb.append("  Puertos: ").append(d.openPorts.toString()).append("\n");
+            sb.append("\n");
+        }
+
+        Intent intent = new Intent(Intent.ACTION_SEND);
+        intent.setType("text/plain");
+        intent.putExtra(Intent.EXTRA_TEXT, sb.toString());
+        startActivity(Intent.createChooser(intent, "Exportar resultados"));
+    }
+
     private void updateEmptyState() {
         boolean scanning = !btnScan.isEnabled();
 
         if (devices.isEmpty() && !scanning) {
-            // Show empty state
             layoutEmpty.setVisibility(View.VISIBLE);
             layoutEmpty.setAlpha(0f);
             layoutEmpty.animate().alpha(1f).setDuration(300).start();
 
             if (hasScannedBefore) {
-                // Scan completed with 0 results
                 txtEmptyHint.setVisibility(View.VISIBLE);
             } else {
-                // Initial state — never scanned
                 txtEmptyHint.setVisibility(View.GONE);
             }
         } else if (layoutEmpty.getVisibility() == View.VISIBLE) {
-            // Fade out and hide empty state (has devices or scanning)
             layoutEmpty.animate().alpha(0f).setDuration(200)
                     .withEndAction(() -> layoutEmpty.setVisibility(View.GONE))
                     .start();
         }
-        // If already GONE, no action needed
     }
 
-    // ── Premium: Empty State Pulse Animation ────────────────────────
+    // ── Empty State Pulse Animation ─────────────────────────────
 
     private void setupEmptyPulse() {
         View radarBg = findViewById(R.id.imgEmptyRadarBg);
@@ -853,14 +873,13 @@ public class MainActivity extends AppCompatActivity
         emptyPulseAnim.setRepeatMode(ObjectAnimator.REVERSE);
     }
 
-    // ── Premium: Placeholder Shimmer ──────────────────────────────
+    // ── Placeholder Shimmer ──────────────────────────────────────
 
     private void animatePlaceholders(View layoutPlaceholders) {
         if (!(layoutPlaceholders instanceof ViewGroup)) return;
         ViewGroup container = (ViewGroup) layoutPlaceholders;
         for (int i = 0; i < container.getChildCount(); i++) {
             View card = container.getChildAt(i);
-            // Pulsar alpha suavemente en cada card placeholder
             card.setAlpha(0.4f);
             card.animate()
                     .alpha(0.7f)
@@ -875,7 +894,7 @@ public class MainActivity extends AppCompatActivity
         }
     }
 
-    // ── Premium: FAB Rotation Animation ────────────────────────────
+    // ── FAB Rotation Animation ──────────────────────────────────
 
     private void setupFabRotation() {
         fabRotationAnim = ObjectAnimator.ofFloat(btnScan, "rotation", 0f, 360f);
@@ -884,11 +903,119 @@ public class MainActivity extends AppCompatActivity
         fabRotationAnim.setRepeatCount(ObjectAnimator.INFINITE);
     }
 
+    // ── Speed Test ───────────────────────────────────────────────
+
+    private void showSpeedTest() {
+        if (showingSpeedTest) return;
+        hideAllViews();
+        showingSpeedTest = true;
+
+        ViewGroup root = findViewById(R.id.rootConstraint);
+        TransitionSet set = new TransitionSet()
+                .addTransition(new Slide(android.view.Gravity.END))
+                .addTransition(new Fade())
+                .setDuration(350);
+        TransitionManager.beginDelayedTransition(root, set);
+
+        layoutScannerContent.setVisibility(View.GONE);
+        btnScan.setVisibility(View.GONE);
+        layoutSpeedTest.setVisibility(View.VISIBLE);
+        navView.setCheckedItem(R.id.nav_speedtest);
+
+        setupSpeedTestView();
+    }
+
+    private void setupSpeedTestView() {
+        View btnStart = layoutSpeedTest.findViewById(R.id.btnStartSpeedtest);
+        ProgressBar progress = layoutSpeedTest.findViewById(R.id.speedtestProgress);
+        TextView txtPhase = layoutSpeedTest.findViewById(R.id.txtSpeedtestPhase);
+        View results = layoutSpeedTest.findViewById(R.id.speedtestResults);
+        SpeedometerGauge gauge = layoutSpeedTest.findViewById(R.id.gaugeDownload);
+        TextView txtPing = layoutSpeedTest.findViewById(R.id.txtPingResult);
+        TextView txtJitter = layoutSpeedTest.findViewById(R.id.txtJitterResult);
+        View btnShare = layoutSpeedTest.findViewById(R.id.btnShareSpeedtest);
+
+        // Track final speed for share
+        final double[] finalDown = {0};
+
+        // Reset UI state
+        progress.setVisibility(View.GONE);
+        txtPhase.setVisibility(View.GONE);
+        results.setVisibility(View.GONE);
+        btnStart.setVisibility(View.VISIBLE);
+        gauge.setSpeed(0);
+
+        btnStart.setOnClickListener(v -> {
+            HapticUtil.performConfirm(v);
+
+            btnStart.setVisibility(View.GONE);
+            progress.setVisibility(View.VISIBLE);
+            txtPhase.setVisibility(View.VISIBLE);
+            results.setVisibility(View.VISIBLE);
+            btnShare.setVisibility(View.GONE);
+            gauge.setSpeed(0);
+
+            speedTestTool.runTest(new SpeedTestTool.Callback() {
+                @Override public void onPhase(String phase) {
+                    runOnUiThread(() -> txtPhase.setText(phase));
+                }
+                @Override public void onProgress(int percent) {
+                    runOnUiThread(() -> progress.setProgress(percent));
+                }
+                @Override public void onPingResult(double pingMs, double jitterMs) {
+                    runOnUiThread(() -> {
+                        txtPing.setText(pingMs > 0 ? String.format("%.0f", pingMs) : "—");
+                        txtJitter.setText(jitterMs > 0 ? String.format("%.1f", jitterMs) : "—");
+                    });
+                }
+                @Override public void onDownloadSpeedUpdate(double currentMbps) {
+                    runOnUiThread(() -> gauge.setSpeed(currentMbps));
+                }
+                @Override public void onDownloadResult(double mbps) {
+                    finalDown[0] = mbps;
+                }
+                @Override public void onUploadResult(double mbps) {}
+                @Override public void onFinished(double pingMs, double jitterMs, double downMbps, double upMbps) {
+                    runOnUiThread(() -> {
+                        progress.setVisibility(View.GONE);
+                        txtPhase.setVisibility(View.GONE);
+                        btnStart.setVisibility(View.VISIBLE);
+                        btnShare.setVisibility(View.VISIBLE);
+                        txtPing.setText(pingMs > 0 ? String.format("%.0f", pingMs) : "—");
+                        txtJitter.setText(jitterMs > 0 ? String.format("%.1f", jitterMs) : "—");
+                        HapticUtil.performHeavy(btnStart);
+                    });
+                }
+                @Override public void onError(String message) {
+                    runOnUiThread(() -> {
+                        progress.setVisibility(View.GONE);
+                        txtPhase.setText(message);
+                        txtPhase.setVisibility(View.VISIBLE);
+                        btnStart.setVisibility(View.VISIBLE);
+                        Toast.makeText(MainActivity.this, message, Toast.LENGTH_LONG).show();
+                    });
+                }
+            });
+        });
+
+        btnShare.setOnClickListener(v -> {
+            String text = String.format(
+                    "WScanner Speed Test\nDescarga: %.1f Mbps\nPing: %s ms\nJitter: %s ms",
+                    finalDown[0], txtPing.getText(), txtJitter.getText());
+            Intent intent = new Intent(Intent.ACTION_SEND);
+            intent.setType("text/plain");
+            intent.putExtra(Intent.EXTRA_TEXT, text);
+            startActivity(Intent.createChooser(intent, "Compartir resultado"));
+        });
+    }
+
+    // ── Back & Destroy ───────────────────────────────────────────
+
     @Override
     public void onBackPressed() {
         if (drawerLayout.isDrawerOpen(navView)) {
             drawerLayout.closeDrawer(navView);
-        } else if (showingDeviceDetail || showingAbout) {
+        } else if (showingDeviceDetail || showingAbout || showingSpeedTest) {
             showScanner();
         } else {
             super.onBackPressed();
@@ -897,7 +1024,6 @@ public class MainActivity extends AppCompatActivity
 
     @Override
     protected void onDestroy() {
-        // Limpiar antes de super para evitar callbacks durante teardown
         if (activeScanHandler != null) {
             activeScanHandler.removeCallbacksAndMessages(null);
         }

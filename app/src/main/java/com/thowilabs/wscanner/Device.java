@@ -15,6 +15,8 @@ public class Device {
     public List<Integer> openPorts = new ArrayList<>();
     public List<String> serviceNames = new ArrayList<>();
     public boolean online = true;       // false = visto antes, ya no responde
+    public String userLabel = null;     // etiqueta personalizada del usuario
+    public long lastSeen = 0;           // System.currentTimeMillis() del último descubrimiento
 
     public Device(String name, String ip, String mac, String vendor) {
         this(name, ip, mac, vendor, "Heurística", null);

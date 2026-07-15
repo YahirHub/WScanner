@@ -7,6 +7,10 @@
             android:icon="@drawable/ic_radar"
             android:title="Escáner" />
         <item
+            android:id="@+id/nav_speedtest"
+            android:icon="@drawable/ic_speedtest"
+            android:title="Test de Velocidad" />
+        <item
             android:id="@+id/nav_about"
             android:icon="@drawable/ic_about"
             android:title="Acerca de" />

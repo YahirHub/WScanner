@@ -9,4 +9,9 @@
         app:showAsAction="collapseActionView|ifRoom"
         app:actionViewClass="androidx.appcompat.widget.SearchView" />
 
+    <item
+        android:id="@+id/action_export"
+        android:title="Exportar resultados"
+        app:showAsAction="never" />
+
 </menu>

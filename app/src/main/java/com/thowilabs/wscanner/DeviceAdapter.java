@@ -239,7 +239,11 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.Holder>
         drawable.setSizeYPx(sizePx);
         h.iconView.setImageDrawable(drawable);
 
-        h.txtName.setText(d.name);
+        // Show userLabel if set, otherwise device name
+        String displayName = (d.userLabel != null && !d.userLabel.isEmpty())
+                ? d.userLabel + "  ·  " + d.name
+                : d.name;
+        h.txtName.setText(displayName);
         h.txtIp.setText(d.ip);
 
         // Vendor / MAC

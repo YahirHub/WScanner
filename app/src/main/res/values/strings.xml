@@ -2,4 +2,51 @@
     <string name="app_name">WScanner</string>
     <string name="drawer_open">Abrir menú</string>
     <string name="drawer_close">Cerrar menú</string>
+
+    <!-- Speed Test -->
+    <string name="speedtest_title">Test de Velocidad</string>
+    <string name="speedtest_server_hint">URL del servidor LibreSpeed</string>
+    <string name="speedtest_start">Iniciar Test</string>
+    <string name="speedtest_download">Descarga</string>
+    <string name="speedtest_upload">Subida</string>
+    <string name="speedtest_ping">Ping</string>
+    <string name="speedtest_jitter">Jitter</string>
+    <string name="speedtest_share">Compartir resultado</string>
+    <string name="speedtest_phase_warmup">Calentando…</string>
+    <string name="speedtest_phase_ping">Midiendo latencia…</string>
+    <string name="speedtest_phase_download">Midiendo descarga…</string>
+    <string name="speedtest_phase_upload">Midiendo subida…</string>
+
+    <!-- Wake-on-LAN -->
+    <string name="wol_title">Wake-on-LAN</string>
+    <string name="wol_mac_hint">AA:BB:CC:DD:EE:FF</string>
+    <string name="wol_broadcast_hint">255.255.255.255</string>
+    <string name="wol_send">Enviar Magic Packet</string>
+    <string name="wol_devices_title">Dispositivos con MAC conocida</string>
+    <string name="wol_sent">Magic Packet enviado a %s</string>
+    <string name="wol_error_mac">Formato MAC no válido</string>
+    <string name="wol_wake">Wake</string>
+
+    <!-- Traceroute -->
+    <string name="traceroute_title">Traceroute</string>
+    <string name="traceroute_host_hint">google.com</string>
+    <string name="traceroute_max_hops">Máx. saltos</string>
+    <string name="traceroute_start">Iniciar</string>
+    <string name="traceroute_done">Destino alcanzado en %d saltos</string>
+    <string name="traceroute_timeout">* * *</string>
+
+    <!-- Historial -->
+    <string name="history_title">Historial de escaneos</string>
+    <string name="history_empty">Sin escaneos guardados</string>
+
+    <!-- Export -->
+    <string name="export_title">Resultados WScanner</string>
+    <string name="export_no_devices">No hay dispositivos para exportar</string>
+
+    <!-- DNS -->
+    <string name="dns_lookup">DNS Lookup</string>
+    <string name="dns_result">%s → %s</string>
+
+    <!-- Device labels -->
+    <string name="label_edit">Editar etiqueta</string>
 </resources>
