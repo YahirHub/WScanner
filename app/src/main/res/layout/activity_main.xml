@@ -170,109 +170,6 @@
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintTop_toBottomOf="@id/layoutNetworkInfo" />
 
-                <!-- Sort chips row -->
-                <LinearLayout
-                    android:id="@+id/layoutSortChips"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:padding="10dp"
-                    android:gravity="center"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/divider1">
-
-                    <TextView
-                        android:id="@+id/chipSortIp"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="IP"
-                        android:textColor="#FF00E5FF"
-                        android:textSize="11sp"
-                        android:fontFamily="sans-serif-medium"
-                        android:paddingHorizontal="12dp"
-                        android:paddingVertical="5dp"
-                        android:layout_marginEnd="8dp"
-                        android:background="@drawable/badge_empty_hint"
-                        android:clickable="true"
-                        android:focusable="true" />
-
-                    <TextView
-                        android:id="@+id/chipSortName"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Nombre"
-                        android:textColor="#FF8B949E"
-                        android:textSize="11sp"
-                        android:fontFamily="sans-serif-medium"
-                        android:paddingHorizontal="12dp"
-                        android:paddingVertical="5dp"
-                        android:layout_marginEnd="8dp"
-                        android:clickable="true"
-                        android:focusable="true" />
-
-                    <TextView
-                        android:id="@+id/chipSortVendor"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Vendor"
-                        android:textColor="#FF8B949E"
-                        android:textSize="11sp"
-                        android:fontFamily="sans-serif-medium"
-                        android:paddingHorizontal="12dp"
-                        android:paddingVertical="5dp"
-                        android:layout_marginEnd="8dp"
-                        android:clickable="true"
-                        android:focusable="true" />
-
-                    <TextView
-                        android:id="@+id/chipSortMethod"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Método"
-                        android:textColor="#FF8B949E"
-                        android:textSize="11sp"
-                        android:fontFamily="sans-serif-medium"
-                        android:paddingHorizontal="12dp"
-                        android:paddingVertical="5dp"
-                        android:clickable="true"
-                        android:focusable="true" />
-
-                    <!-- Separator dot -->
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="·"
-                        android:textColor="#FF30363D"
-                        android:textSize="14sp"
-                        android:paddingHorizontal="6dp" />
-
-                    <!-- Active monitor toggle -->
-                    <TextView
-                        android:id="@+id/chipMonitor"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Monitor"
-                        android:textColor="#FF8B949E"
-                        android:textSize="11sp"
-                        android:fontFamily="sans-serif-medium"
-                        android:paddingHorizontal="12dp"
-                        android:paddingVertical="5dp"
-                        android:clickable="true"
-                        android:focusable="true" />
-
-                </LinearLayout>
-
-                <!-- Separator 2 -->
-                <View
-                    android:id="@+id/divider2"
-                    android:layout_width="0dp"
-                    android:layout_height="1dp"
-                    android:background="@color/divider"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/layoutSortChips" />
-
                 <!-- Status text -->
                 <TextView
                     android:id="@+id/txtStatus"
@@ -285,7 +182,7 @@
                     android:gravity="center"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/divider2" />
+                    app:layout_constraintTop_toBottomOf="@id/divider1" />
 
                 <!-- Separator 3 -->
                 <View

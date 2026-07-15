@@ -92,10 +92,6 @@ public class MainActivity extends AppCompatActivity
     // Device labels
     private SharedPreferences labelPrefs;
 
-    // Sort chips
-    private View chipSortIp, chipSortName, chipSortVendor, chipSortMethod;
-    private String currentSort = "ip";
-
     // Premium: FAB rotation animation
     private ObjectAnimator fabRotationAnim;
 
@@ -107,7 +103,6 @@ public class MainActivity extends AppCompatActivity
     private boolean activeScanMode = false;
     private int activeScanCycle = 0;
     private Handler activeScanHandler;
-    private TextView chipMonitor;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -159,21 +154,6 @@ public class MainActivity extends AppCompatActivity
         // Device labels
         labelPrefs = getSharedPreferences("wscanner_labels", MODE_PRIVATE);
 
-        // Sort chips
-        chipSortIp = findViewById(R.id.chipSortIp);
-        chipSortName = findViewById(R.id.chipSortName);
-        chipSortVendor = findViewById(R.id.chipSortVendor);
-        chipSortMethod = findViewById(R.id.chipSortMethod);
-
-        // Monitor chip
-        chipMonitor = findViewById(R.id.chipMonitor);
-        if (chipMonitor != null) {
-            chipMonitor.setOnClickListener(v -> {
-                HapticUtil.performClick(chipMonitor);
-                toggleActiveScan();
-            });
-        }
-
         // RecyclerView
         RecyclerView rv = findViewById(R.id.listDevices);
         rv.setLayoutManager(new LinearLayoutManager(this));
@@ -194,6 +174,16 @@ public class MainActivity extends AppCompatActivity
             }
         });
 
+        // FAB long-press to toggle active scan (monitor mode)
+        btnScan.setOnLongClickListener(v -> {
+            HapticUtil.performHeavy(btnScan);
+            toggleActiveScan();
+            Toast.makeText(this,
+                    activeScanMode ? "Modo monitor ACTIVADO" : "Modo monitor DESACTIVADO",
+                    Toast.LENGTH_SHORT).show();
+            return true;
+        });
+
         // FAB press state animation
         btnScan.setOnTouchListener((v, event) -> {
             switch (event.getAction()) {
@@ -207,9 +197,6 @@ public class MainActivity extends AppCompatActivity
             }
             return false;
         });
-
-        // Sort chip click handlers
-        setupSortChips();
 
         // Premium: setup FAB rotation animation
         setupFabRotation();
@@ -332,6 +319,7 @@ public class MainActivity extends AppCompatActivity
             btnScan.setVisibility(View.VISIBLE);
 
             navView.setCheckedItem(R.id.nav_scanner);
+            invalidateOptionsMenu();
         }
     }
 
@@ -362,6 +350,7 @@ public class MainActivity extends AppCompatActivity
         btnScan.setVisibility(View.GONE);
         layoutAbout.setVisibility(View.VISIBLE);
         navView.setCheckedItem(R.id.nav_about);
+        invalidateOptionsMenu();
     }
 
     // ── Escaneo ────────────────────────────────────────────────────
@@ -514,14 +503,9 @@ public class MainActivity extends AppCompatActivity
     }
 
     private void updateMonitorChipStyle() {
-        if (chipMonitor == null) return;
         if (activeScanMode) {
-            chipMonitor.setTextColor(0xFFFFFFFF);
-            chipMonitor.setBackgroundResource(R.drawable.badge_online);
             btnScan.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFFF85149));
         } else {
-            chipMonitor.setTextColor(0xFF8B949E);
-            chipMonitor.setBackgroundResource(0);
             btnScan.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFF00E5FF));
         }
     }
@@ -584,6 +568,7 @@ public class MainActivity extends AppCompatActivity
         layoutScannerContent.setVisibility(View.GONE);
         btnScan.setVisibility(View.GONE);
         layoutDeviceDetail.setVisibility(View.VISIBLE);
+        invalidateOptionsMenu();
 
         populateDeviceDetail(device);
     }
@@ -741,53 +726,6 @@ public class MainActivity extends AppCompatActivity
         }).start();
     }
 
-    // ── Sort chips ──────────────────────────────────────────────
-
-    private void setupSortChips() {
-        View.OnClickListener sortListener = v -> {
-            int id = v.getId();
-            String criteria;
-            if (id == R.id.chipSortIp) criteria = "ip";
-            else if (id == R.id.chipSortName) criteria = "name";
-            else if (id == R.id.chipSortVendor) criteria = "vendor";
-            else if (id == R.id.chipSortMethod) criteria = "method";
-            else return;
-
-            currentSort = criteria;
-            updateSortChipStyles();
-            adapter.sortBy(criteria);
-            ipIndex.clear();
-            for (int i = 0; i < devices.size(); i++) {
-                ipIndex.put(devices.get(i).ip, i);
-            }
-            HapticUtil.performClick(chipSortIp);
-        };
-
-        chipSortIp.setOnClickListener(sortListener);
-        chipSortName.setOnClickListener(sortListener);
-        chipSortVendor.setOnClickListener(sortListener);
-        chipSortMethod.setOnClickListener(sortListener);
-
-        updateSortChipStyles();
-    }
-
-    private void updateSortChipStyles() {
-        int activeColor = 0xFF00E5FF;
-        int inactiveColor = 0xFF8B949E;
-        int activeBgRes = R.drawable.badge_empty_hint;
-
-        View[] chips = {chipSortIp, chipSortName, chipSortVendor, chipSortMethod};
-        String[] criteria = {"ip", "name", "vendor", "method"};
-
-        for (int i = 0; i < chips.length; i++) {
-            if (chips[i] == null) continue;
-            TextView chip = (TextView) chips[i];
-            boolean active = currentSort.equals(criteria[i]);
-            chip.setTextColor(active ? activeColor : inactiveColor);
-            chip.setBackgroundResource(active ? activeBgRes : 0);
-        }
-    }
-
     private void hideKeyboard() {
         View view = getCurrentFocus();
         if (view != null) {
@@ -802,6 +740,16 @@ public class MainActivity extends AppCompatActivity
         getMenuInflater().inflate(R.menu.toolbar_menu, menu);
         setupSearchView(menu);
         return true;
+    }
+
+    @Override
+    public boolean onPrepareOptionsMenu(Menu menu) {
+        MenuItem searchItem = menu.findItem(R.id.action_search);
+        if (searchItem != null) {
+            boolean onScanner = !showingAbout && !showingSpeedTest && !showingDeviceDetail;
+            searchItem.setVisible(onScanner);
+        }
+        return super.onPrepareOptionsMenu(menu);
     }
 
     @Override
@@ -921,6 +869,7 @@ public class MainActivity extends AppCompatActivity
         btnScan.setVisibility(View.GONE);
         layoutSpeedTest.setVisibility(View.VISIBLE);
         navView.setCheckedItem(R.id.nav_speedtest);
+        invalidateOptionsMenu();
 
         setupSpeedTestView();
     }
