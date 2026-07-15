@@ -59,7 +59,6 @@ public class MainActivity extends AppCompatActivity
     // Acerca de view (embedded, no separate activity)
     private View layoutAbout;
     private View layoutScannerContent;
-    private Toolbar toolbar;
     private boolean showingAbout = false;
 
     // Premium: FAB rotation animation
@@ -71,7 +70,7 @@ public class MainActivity extends AppCompatActivity
         setContentView(R.layout.activity_main);
 
         // Toolbar
-        toolbar = findViewById(R.id.toolbar);
+        Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
         // Drawer + hamburguesa
