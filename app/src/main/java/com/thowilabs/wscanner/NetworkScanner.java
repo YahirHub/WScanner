@@ -37,7 +37,36 @@ public class NetworkScanner {
 
     private VendorResolver vendorResolver;
 
-    private static final int[] PROBE_PORTS = {80, 443, 22, 445, 8080, 23, 21, 554, 1883};
+    private static final int[] PROBE_PORTS = {
+            80, 443, 22, 445, 8080, 23, 21, 554, 1883,
+            53, 3389, 5900, 5000, 5353, 9100
+    };
+
+    // ════════════════════ Service name resolver ═══════════════════
+
+    private static final Map<Integer, String> SERVICE_NAMES = new HashMap<>();
+    static {
+        SERVICE_NAMES.put(80, "HTTP");
+        SERVICE_NAMES.put(443, "HTTPS");
+        SERVICE_NAMES.put(22, "SSH");
+        SERVICE_NAMES.put(445, "SMB");
+        SERVICE_NAMES.put(8080, "HTTP-Alt");
+        SERVICE_NAMES.put(23, "Telnet");
+        SERVICE_NAMES.put(21, "FTP");
+        SERVICE_NAMES.put(554, "RTSP");
+        SERVICE_NAMES.put(1883, "MQTT");
+        SERVICE_NAMES.put(53, "DNS");
+        SERVICE_NAMES.put(3389, "RDP");
+        SERVICE_NAMES.put(5900, "VNC");
+        SERVICE_NAMES.put(5000, "UPnP");
+        SERVICE_NAMES.put(5353, "mDNS");
+        SERVICE_NAMES.put(9100, "IPP");
+    }
+
+    /** Retorna el nombre del servicio para un puerto, o null si es desconocido. */
+    public static String serviceName(int port) {
+        return SERVICE_NAMES.get(port);
+    }
 
     public void scan(Context context, Callback callback) {
         new Thread(() -> {
@@ -231,14 +260,27 @@ public class NetworkScanner {
             int portScanned = 0;
             for (String ip : foundIps) {
                 StringBuilder ports = new StringBuilder();
+                java.util.List<Integer> openPortsList = new java.util.ArrayList<>();
+                java.util.List<String> serviceNamesList = new java.util.ArrayList<>();
+
                 for (int port : PROBE_PORTS) {
                     if (isPortOpen(ip, port, 150)) {
                         ports.append(port).append(" ");
+                        openPortsList.add(port);
+                        String svc = serviceName(port);
+                        if (svc != null) serviceNamesList.add(svc);
                     }
                 }
                 if (ports.length() > 0) {
                     String portStr = ports.toString().trim();
                     Log.i(TAG, "  🔌 " + ip + " → [" + portStr + "]");
+
+                    // Emitir dispositivo con info de puertos
+                    Device portDevice = new Device(guessType(ip, gateway, portStr), ip,
+                            "N/A", "Desconocido", "Heurística",
+                            "Puertos: " + portStr);
+                    portDevice.openPorts = openPortsList;
+                    portDevice.serviceNames = serviceNamesList;
 
                     // HTTP banner
                     if (portStr.contains("80") || portStr.contains("8080") || portStr.contains("443")) {
@@ -247,19 +289,23 @@ public class NetworkScanner {
                             String name = guessType(ip, gateway, portStr);
                             // Si ya tiene mDNS/SSDP, no sobreescribir con banner
                             if (!mdnsNames.containsKey(ip) && !ssdpNames.containsKey(ip)) {
-                                callback.onDeviceFound(new Device(banner, ip,
-                                        "N/A", "Desconocido", "HTTP", banner));
+                                Device httpDevice = new Device(banner, ip,
+                                        "N/A", "Desconocido", "HTTP", banner);
+                                httpDevice.openPorts = openPortsList;
+                                httpDevice.serviceNames = serviceNamesList;
+                                callback.onDeviceFound(httpDevice);
                             } else {
-                                callback.onDeviceFound(new Device(name, ip,
-                                        "N/A", "Desconocido", "Heurística",
-                                        "Puertos: " + portStr + "  " + banner));
+                                portDevice.name = name;
+                                portDevice.discoveryDetail = "Puertos: " + portStr + "  " + banner;
+                                callback.onDeviceFound(portDevice);
                             }
+                        } else {
+                            callback.onDeviceFound(portDevice);
                         }
+                    } else {
+                        callback.onDeviceFound(portDevice);
                     }
                 }
-
-                // Actualizar con info de puertos si no hay mejor nombre
-                // (ya se emitió en Fase 1, los demás casos se cubren arriba)
 
                 portScanned++;
                 int pct2 = 80 + (portScanned * 10 / Math.max(foundIps.size(), 1));

@@ -156,7 +156,78 @@
                 android:layout_height="1dp"
                 android:background="@color/divider" />
 
-            <!-- Status text -->
+            <!-- Sort chips row -->
+            <LinearLayout
+                android:id="@+id/layoutSortChips"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:padding="10dp"
+                android:gravity="center">
+
+                <TextView
+                    android:id="@+id/chipSortIp"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="IP"
+                    android:textColor="#FF00E5FF"
+                    android:textSize="11sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="5dp"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/badge_empty_hint"
+                    android:clickable="true"
+                    android:focusable="true" />
+
+                <TextView
+                    android:id="@+id/chipSortName"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Nombre"
+                    android:textColor="#FF8B949E"
+                    android:textSize="11sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="5dp"
+                    android:layout_marginEnd="8dp"
+                    android:clickable="true"
+                    android:focusable="true" />
+
+                <TextView
+                    android:id="@+id/chipSortVendor"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Vendor"
+                    android:textColor="#FF8B949E"
+                    android:textSize="11sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="5dp"
+                    android:layout_marginEnd="8dp"
+                    android:clickable="true"
+                    android:focusable="true" />
+
+                <TextView
+                    android:id="@+id/chipSortMethod"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Método"
+                    android:textColor="#FF8B949E"
+                    android:textSize="11sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="5dp"
+                    android:clickable="true"
+                    android:focusable="true" />
+
+            </LinearLayout>
+
+            <!-- Separator -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/divider" />
             <TextView
                 android:id="@+id/txtStatus"
                 android:layout_width="match_parent"
@@ -202,6 +273,9 @@
             </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
             </LinearLayout><!-- /layoutScannerContent -->
+
+            <!-- ═══ Device Detail content (shown on card tap) ═══ -->
+            <include layout="@layout/layout_device_detail" />
 
             <!-- ═══ Acerca de content (shown/hidden via nav drawer) ═══ -->
             <ScrollView

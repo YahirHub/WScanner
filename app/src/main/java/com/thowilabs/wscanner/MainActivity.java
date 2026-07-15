@@ -1,21 +1,31 @@
 package com.thowilabs.wscanner;
 
 import android.animation.ObjectAnimator;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.LinearInterpolator;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.ActionBarDrawerToggle;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.SearchView;
 import androidx.appcompat.widget.Toolbar;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -24,6 +34,7 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.navigation.NavigationView;
+import com.mikepenz.iconics.IconicsDrawable;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -60,6 +71,15 @@ public class MainActivity extends AppCompatActivity
     private View layoutAbout;
     private View layoutScannerContent;
     private boolean showingAbout = false;
+
+    // Device detail view (embedded)
+    private View layoutDeviceDetail;
+    private boolean showingDeviceDetail = false;
+    private Device currentDetailDevice;
+
+    // Sort chips
+    private View chipSortIp, chipSortName, chipSortVendor, chipSortMethod;
+    private String currentSort = "ip";
 
     // Premium: FAB rotation animation
     private ObjectAnimator fabRotationAnim;
@@ -105,10 +125,20 @@ public class MainActivity extends AppCompatActivity
         layoutAbout = findViewById(R.id.layoutAbout);
         layoutScannerContent = findViewById(R.id.layoutScannerContent);
 
+        // Device detail view
+        layoutDeviceDetail = findViewById(R.id.layoutDeviceDetail);
+
+        // Sort chips
+        chipSortIp = findViewById(R.id.chipSortIp);
+        chipSortName = findViewById(R.id.chipSortName);
+        chipSortVendor = findViewById(R.id.chipSortVendor);
+        chipSortMethod = findViewById(R.id.chipSortMethod);
+
         // RecyclerView
         RecyclerView rv = findViewById(R.id.listDevices);
         rv.setLayoutManager(new LinearLayoutManager(this));
         adapter = new DeviceAdapter(devices);
+        adapter.setOnDeviceClickListener(this::showDeviceDetail);
         rv.setAdapter(adapter);
 
         // Mostrar info de red actual
@@ -137,6 +167,9 @@ public class MainActivity extends AppCompatActivity
         // Swipe to refresh
         swipeRefresh.setOnRefreshListener(this::startScan);
         swipeRefresh.setColorSchemeColors(0xFF00E5FF, 0xFF00B8D4, 0xFF3FB950);
+
+        // Sort chip click handlers
+        setupSortChips();
 
         // Premium: setup FAB rotation animation
         setupFabRotation();
@@ -198,21 +231,66 @@ public class MainActivity extends AppCompatActivity
         return true;
     }
 
+    // ── Search setup (called from menu) ─────────────────────────
+
+    private void setupSearchView(Menu menu) {
+        MenuItem searchItem = menu.findItem(R.id.action_search);
+        if (searchItem == null) return;
+
+        SearchView searchView = (SearchView) searchItem.getActionView();
+        if (searchView == null) return;
+
+        searchView.setQueryHint("Buscar por nombre, IP, vendor…");
+        searchView.setMaxWidth(Integer.MAX_VALUE);
+
+        // Style
+        SearchView.SearchAutoComplete autoComplete = searchView.findViewById(
+                androidx.appcompat.R.id.search_src_text);
+        if (autoComplete != null) {
+            autoComplete.setTextColor(0xFFE6EDF3);
+            autoComplete.setHintTextColor(0xFF6E7681);
+        }
+
+        searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+            @Override
+            public boolean onQueryTextSubmit(String query) {
+                hideKeyboard();
+                return true;
+            }
+
+            @Override
+            public boolean onQueryTextChange(String newText) {
+                adapter.getFilter().filter(newText);
+                return true;
+            }
+        });
+
+        searchView.setOnCloseListener(() -> {
+            hideKeyboard();
+            return false;
+        });
+    }
+
     private void showScanner() {
-        if (!showingAbout) return;
-        showingAbout = false;
-        layoutScannerContent.setVisibility(View.VISIBLE);
-        btnScan.setVisibility(View.VISIBLE);
-        layoutAbout.setVisibility(View.GONE);
-        navView.setCheckedItem(R.id.nav_scanner);
+        if (showingAbout || showingDeviceDetail) {
+            showingAbout = false;
+            showingDeviceDetail = false;
+            layoutScannerContent.setVisibility(View.VISIBLE);
+            btnScan.setVisibility(View.VISIBLE);
+            layoutAbout.setVisibility(View.GONE);
+            layoutDeviceDetail.setVisibility(View.GONE);
+            navView.setCheckedItem(R.id.nav_scanner);
+        }
     }
 
     private void showAbout() {
         if (showingAbout) return;
         showingAbout = true;
+        showingDeviceDetail = false;
         layoutScannerContent.setVisibility(View.GONE);
         btnScan.setVisibility(View.GONE);
         layoutAbout.setVisibility(View.VISIBLE);
+        layoutDeviceDetail.setVisibility(View.GONE);
         navView.setCheckedItem(R.id.nav_about);
     }
 
@@ -236,15 +314,32 @@ public class MainActivity extends AppCompatActivity
                     Integer existingIdx = ipIndex.get(device.ip);
 
                     if (existingIdx != null) {
-                        // Actualizar dispositivo existente si hay mejor información
                         Device existing = devices.get(existingIdx);
-                        // Solo reemplazar si la nueva info es de una fuente mejor
-                        // (mDNS/SSDP > DNS > Heurística)
+
+                        // Merge complementary info (ports, mac) always
+                        if (!device.openPorts.isEmpty()) {
+                            existing.openPorts = device.openPorts;
+                            existing.serviceNames = device.serviceNames;
+                        }
+                        if (device.mac != null && !device.mac.equals("N/A")
+                                && (existing.mac == null || existing.mac.equals("N/A"))) {
+                            existing.mac = device.mac;
+                            existing.vendor = device.vendor;
+                        }
+
+                        // Replace only if new source is better
                         if (isBetterSource(device.discoveryMethod, existing.discoveryMethod)) {
-                            devices.set(existingIdx, device);
+                            existing.name = device.name;
+                            existing.vendor = device.vendor;
+                            existing.mac = device.mac;
+                            existing.discoveryMethod = device.discoveryMethod;
+                            existing.discoveryDetail = device.discoveryDetail;
                             adapter.notifyItemChanged(existingIdx);
                             Log.d(TAG, "🔄 Actualizado: " + device.ip
                                     + " → \"" + device.name + "\" (" + device.discoveryMethod + ")");
+                        } else if (!device.openPorts.isEmpty()) {
+                            // Only ports updated, still need to refresh UI
+                            adapter.notifyItemChanged(existingIdx);
                         }
                     } else {
                         // Nuevo dispositivo
@@ -349,7 +444,236 @@ public class MainActivity extends AppCompatActivity
         updateEmptyState();
     }
 
-    // ── Premium: Empty State ───────────────────────────────────────
+    // ── Device Detail view ──────────────────────────────────────
+
+    private void showDeviceDetail(Device device) {
+        if (showingDeviceDetail && currentDetailDevice == device) return;
+
+        showingDeviceDetail = true;
+        showingAbout = false;
+        currentDetailDevice = device;
+
+        layoutScannerContent.setVisibility(View.GONE);
+        btnScan.setVisibility(View.GONE);
+        layoutAbout.setVisibility(View.GONE);
+        layoutDeviceDetail.setVisibility(View.VISIBLE);
+
+        populateDeviceDetail(device);
+    }
+
+    private void populateDeviceDetail(Device d) {
+        Context ctx = this;
+
+        // Icon
+        ImageView iconView = findViewById(R.id.detailIcon);
+        int sizePx = (int) (32 * ctx.getResources().getDisplayMetrics().density);
+        IconicsDrawable drawable = new IconicsDrawable(ctx, "cmd_laptop");
+        drawable.setColorList(android.content.res.ColorStateList.valueOf(0xFF00E5FF));
+        drawable.setSizeXPx(sizePx);
+        drawable.setSizeYPx(sizePx);
+        iconView.setImageDrawable(drawable);
+
+        // Name
+        TextView nameView = findViewById(R.id.detailName);
+        nameView.setText(d.name);
+
+        // Method badge
+        TextView badgeView = findViewById(R.id.detailMethodBadge);
+        if (d.discoveryMethod != null && !d.discoveryMethod.equals("Heurística")) {
+            badgeView.setText("vía " + d.discoveryMethod);
+            badgeView.setVisibility(View.VISIBLE);
+        } else {
+            badgeView.setVisibility(View.GONE);
+        }
+
+        // IP
+        TextView ipView = findViewById(R.id.detailIp);
+        ipView.setText(d.ip);
+
+        // MAC
+        View macRow = findViewById(R.id.detailMacRow);
+        TextView macView = findViewById(R.id.detailMac);
+        if (d.mac != null && !d.mac.equals("N/A")) {
+            macView.setText(d.mac.toUpperCase());
+            macRow.setVisibility(View.VISIBLE);
+        } else {
+            macRow.setVisibility(View.GONE);
+        }
+
+        // Vendor
+        View vendorRow = findViewById(R.id.detailVendorRow);
+        TextView vendorView = findViewById(R.id.detailVendor);
+        if (d.vendor != null && !d.vendor.equals("Desconocido") && !d.vendor.equals(d.name)) {
+            vendorView.setText(d.vendor);
+            vendorRow.setVisibility(View.VISIBLE);
+        } else {
+            vendorRow.setVisibility(View.GONE);
+        }
+
+        // Method
+        TextView methodView = findViewById(R.id.detailMethod);
+        if (d.discoveryMethod != null) {
+            methodView.setText(d.discoveryMethod);
+        } else {
+            methodView.setText("Heurística");
+        }
+
+        // Extra detail
+        View extraRow = findViewById(R.id.detailExtraRow);
+        TextView extraView = findViewById(R.id.detailExtra);
+        if (d.discoveryDetail != null && !d.discoveryDetail.isEmpty()) {
+            extraView.setText(d.discoveryDetail);
+            extraRow.setVisibility(View.VISIBLE);
+        } else {
+            extraRow.setVisibility(View.GONE);
+        }
+
+        // Ports card
+        View portsCard = findViewById(R.id.detailPortsCard);
+        LinearLayout portsList = findViewById(R.id.detailPortsList);
+        portsList.removeAllViews();
+
+        if (!d.openPorts.isEmpty()) {
+            portsCard.setVisibility(View.VISIBLE);
+            for (int i = 0; i < d.openPorts.size(); i++) {
+                int port = d.openPorts.get(i);
+                String svc = NetworkScanner.serviceName(port);
+                String label = svc != null ? port + " (" + svc + ")" : String.valueOf(port);
+
+                TextView portView = new TextView(ctx);
+                portView.setText("🔌  " + label);
+                portView.setTextColor(0xFF00E5FF);
+                portView.setTextSize(13);
+                portView.setPadding(0, 0, 0, (i < d.openPorts.size() - 1) ? 6 : 0);
+                portsList.addView(portView);
+            }
+        } else {
+            portsCard.setVisibility(View.GONE);
+        }
+
+        // Button: Back
+        findViewById(R.id.detailBtnBack).setOnClickListener(v -> showScanner());
+
+        // Button: Copy IP
+        findViewById(R.id.detailBtnCopyIp).setOnClickListener(v -> {
+            ClipboardManager clipboard = (ClipboardManager)
+                    getSystemService(Context.CLIPBOARD_SERVICE);
+            ClipData clip = ClipData.newPlainText("IP", d.ip);
+            clipboard.setPrimaryClip(clip);
+            Toast.makeText(ctx, d.ip + " copiado", Toast.LENGTH_SHORT).show();
+            HapticUtil.performClick(v);
+        });
+
+        // Button: Copy MAC
+        TextView btnCopyMac = findViewById(R.id.detailBtnCopyMac);
+        if (d.mac != null && !d.mac.equals("N/A")) {
+            btnCopyMac.setVisibility(View.VISIBLE);
+            btnCopyMac.setOnClickListener(v -> {
+                ClipboardManager clipboard = (ClipboardManager)
+                        getSystemService(Context.CLIPBOARD_SERVICE);
+                ClipData clip = ClipData.newPlainText("MAC", d.mac);
+                clipboard.setPrimaryClip(clip);
+                Toast.makeText(ctx, d.mac + " copiado", Toast.LENGTH_SHORT).show();
+                HapticUtil.performClick(v);
+            });
+        } else {
+            btnCopyMac.setVisibility(View.GONE);
+        }
+
+        // Button: Open in browser
+        findViewById(R.id.detailBtnOpenBrowser).setOnClickListener(v -> {
+            try {
+                startActivity(new Intent(Intent.ACTION_VIEW,
+                        Uri.parse("http://" + d.ip)));
+            } catch (Exception ignored) {
+                Toast.makeText(ctx, "No se puede abrir el navegador", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        // Button: Ping
+        findViewById(R.id.detailBtnPing).setOnClickListener(v -> {
+            pingDevice(d.ip);
+        });
+    }
+
+    private void pingDevice(String ip) {
+        Toast.makeText(this, "Haciendo ping a " + ip + "…", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            try {
+                java.net.InetAddress addr = java.net.InetAddress.getByName(ip);
+                long t0 = System.currentTimeMillis();
+                boolean reachable = addr.isReachable(2000);
+                long rtt = System.currentTimeMillis() - t0;
+                String msg = reachable
+                        ? ip + " responde — " + rtt + " ms"
+                        : ip + " no responde";
+                runOnUiThread(() ->
+                        Toast.makeText(MainActivity.this, msg, Toast.LENGTH_SHORT).show());
+            } catch (Exception e) {
+                runOnUiThread(() ->
+                        Toast.makeText(MainActivity.this, "Error haciendo ping", Toast.LENGTH_SHORT).show());
+            }
+        }).start();
+    }
+
+    // ── Sort chips ──────────────────────────────────────────────
+
+    private void setupSortChips() {
+        View.OnClickListener sortListener = v -> {
+            int id = v.getId();
+            String criteria;
+            if (id == R.id.chipSortIp) criteria = "ip";
+            else if (id == R.id.chipSortName) criteria = "name";
+            else if (id == R.id.chipSortVendor) criteria = "vendor";
+            else if (id == R.id.chipSortMethod) criteria = "method";
+            else return;
+
+            currentSort = criteria;
+            updateSortChipStyles();
+            adapter.sortBy(criteria);
+            HapticUtil.performClick(chipSortIp);
+        };
+
+        chipSortIp.setOnClickListener(sortListener);
+        chipSortName.setOnClickListener(sortListener);
+        chipSortVendor.setOnClickListener(sortListener);
+        chipSortMethod.setOnClickListener(sortListener);
+
+        updateSortChipStyles();
+    }
+
+    private void updateSortChipStyles() {
+        int activeColor = 0xFF00E5FF;
+        int inactiveColor = 0xFF8B949E;
+        int activeBgRes = R.drawable.badge_empty_hint;
+
+        View[] chips = {chipSortIp, chipSortName, chipSortVendor, chipSortMethod};
+        String[] criteria = {"ip", "name", "vendor", "method"};
+
+        for (int i = 0; i < chips.length; i++) {
+            if (chips[i] == null) continue;
+            TextView chip = (TextView) chips[i];
+            boolean active = currentSort.equals(criteria[i]);
+            chip.setTextColor(active ? activeColor : inactiveColor);
+            chip.setBackgroundResource(active ? activeBgRes : 0);
+        }
+    }
+
+    private void hideKeyboard() {
+        View view = getCurrentFocus();
+        if (view != null) {
+            InputMethodManager imm = (InputMethodManager)
+                    getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (imm != null) imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
+        }
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.toolbar_menu, menu);
+        setupSearchView(menu);
+        return true;
+    }
 
     private void updateEmptyState() {
         boolean scanning = !btnScan.isEnabled();
@@ -389,7 +713,7 @@ public class MainActivity extends AppCompatActivity
     public void onBackPressed() {
         if (drawerLayout.isDrawerOpen(navView)) {
             drawerLayout.closeDrawer(navView);
-        } else if (showingAbout) {
+        } else if (showingDeviceDetail || showingAbout) {
             showScanner();
         } else {
             super.onBackPressed();

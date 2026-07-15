@@ -7,6 +7,8 @@ import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Filter;
+import android.widget.Filterable;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -16,14 +18,68 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.mikepenz.iconics.IconicsDrawable;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
-public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.Holder> {
+public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.Holder>
+        implements Filterable {
 
     private final List<Device> items;
+    private List<Device> filteredItems;  // null = sin filtro activo, usar items directamente
+    private OnDeviceClickListener clickListener;
+
+    public interface OnDeviceClickListener {
+        void onDeviceClick(Device device);
+    }
 
     public DeviceAdapter(List<Device> items) {
         this.items = items;
+        this.filteredItems = null;  // sin filtro → usar items directamente
+    }
+
+    public void setOnDeviceClickListener(OnDeviceClickListener listener) {
+        this.clickListener = listener;
+    }
+
+    /** Ordena la lista por el criterio dado. */
+    public void sortBy(String criteria) {
+        Comparator<Device> comparator;
+        switch (criteria) {
+            case "name":
+                comparator = Comparator.comparing(d -> d.name.toLowerCase());
+                break;
+            case "vendor":
+                comparator = Comparator.comparing(d ->
+                        (d.vendor != null && !d.vendor.equals("Desconocido"))
+                                ? d.vendor.toLowerCase() : "zzz");
+                break;
+            case "method":
+                comparator = Comparator.comparingInt(d ->
+                        d.discoveryMethod != null ? discoveryMethodRank(d.discoveryMethod) : 0);
+                break;
+            case "ip":
+            default:
+                comparator = (a, b) -> {
+                    String[] pa = a.ip.split("\\.");
+                    String[] pb = b.ip.split("\\.");
+                    for (int i = 0; i < 4; i++) {
+                        int va = Integer.parseInt(pa[i]);
+                        int vb = Integer.parseInt(pb[i]);
+                        if (va != vb) return Integer.compare(va, vb);
+                    }
+                    return 0;
+                };
+                break;
+        }
+        Collections.sort(items, comparator);
+        resetFilter();
+        notifyDataSetChanged();
+    }
+
+    private void resetFilter() {
+        filteredItems = null;  // sin filtro activo → usar items directamente
     }
 
     @Override
@@ -151,7 +207,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.Holder> {
 
     @Override
     public void onBindViewHolder(Holder h, int i) {
-        Device d = items.get(i);
+        Device d = (filteredItems != null) ? filteredItems.get(i) : items.get(i);
         Context ctx = h.itemView.getContext();
 
         // Icono profesional via IconicsDrawable
@@ -203,25 +259,89 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.Holder> {
                 .setInterpolator(new android.view.animation.DecelerateInterpolator())
                 .start();
 
-        // Tap to copy IP with haptic feedback
+        // Tap → device detail (or open browser / copy IP as fallback)
         h.itemView.setOnClickListener(v -> {
+            // Long press → copy IP (legacy behavior)
+            // Normal tap → device detail
+            if (clickListener != null) {
+                HapticUtil.performClick(v);
+                clickListener.onDeviceClick(d);
+            } else {
+                // Fallback: copy IP
+                ClipboardManager clipboard = (ClipboardManager)
+                        v.getContext().getSystemService(Context.CLIPBOARD_SERVICE);
+                ClipData clip = ClipData.newPlainText("IP", d.ip);
+                clipboard.setPrimaryClip(clip);
+                Toast.makeText(v.getContext(), d.ip + " copiado", Toast.LENGTH_SHORT).show();
+                HapticUtil.performClick(v);
+            }
+        });
+
+        // Long press → copy IP always
+        h.itemView.setOnLongClickListener(v -> {
             ClipboardManager clipboard = (ClipboardManager)
                     v.getContext().getSystemService(Context.CLIPBOARD_SERVICE);
             ClipData clip = ClipData.newPlainText("IP", d.ip);
             clipboard.setPrimaryClip(clip);
             Toast.makeText(v.getContext(), d.ip + " copiado", Toast.LENGTH_SHORT).show();
-
-            // Premium: haptic feedback on copy
             HapticUtil.performClick(v);
+            return true;
         });
     }
 
     @Override
     public int getItemCount() {
-        return items.size();
+        return filteredItems != null ? filteredItems.size() : items.size();
     }
 
-    // ── Icono por tipo de dispositivo (string names para compatibilidad) ──
+    // ── Filterable implementation ──────────────────────────────────
+
+    @Override
+    public Filter getFilter() {
+        return deviceFilter;
+    }
+
+    private final Filter deviceFilter = new Filter() {
+        @Override
+        protected FilterResults performFiltering(CharSequence constraint) {
+            // ponytail: ConcurrentModification posible si se filtra durante escaneo;
+            // sincronizar sobre items si se vuelve necesario.
+            List<Device> filtered = new ArrayList<>();
+            if (constraint == null || constraint.length() == 0) {
+                filtered.addAll(items);
+            } else {
+                String query = constraint.toString().toLowerCase().trim();
+                for (Device d : items) {
+                    if (matches(d, query)) {
+                        filtered.add(d);
+                    }
+                }
+            }
+            FilterResults results = new FilterResults();
+            results.values = filtered;
+            return results;
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        protected void publishResults(CharSequence constraint, FilterResults results) {
+            if (constraint == null || constraint.length() == 0) {
+                filteredItems = null;  // sin filtro → usar items directamente
+            } else {
+                filteredItems = (List<Device>) results.values;
+            }
+            notifyDataSetChanged();
+        }
+    };
+
+    private boolean matches(Device d, String query) {
+        if (d.name != null && d.name.toLowerCase().contains(query)) return true;
+        if (d.ip != null && d.ip.toLowerCase().contains(query)) return true;
+        if (d.vendor != null && d.vendor.toLowerCase().contains(query)) return true;
+        if (d.mac != null && d.mac.toLowerCase().contains(query)) return true;
+        if (d.discoveryMethod != null && d.discoveryMethod.toLowerCase().contains(query)) return true;
+        return false;
+    }
 
     private String deviceIconName(Device d) {
         String v = (d.vendor != null) ? d.vendor.toLowerCase() : "";
@@ -268,6 +388,19 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.Holder> {
 
     // ── Labels ──────────────────────────────────────────────────────
 
+    private int discoveryMethodRank(String method) {
+        if (method == null) return 0;
+        switch (method) {
+            case "mDNS": return 7;
+            case "SSDP": return 6;
+            case "NetBIOS": return 5;
+            case "OUI DB": return 4;
+            case "DNS": return 3;
+            case "HTTP": return 2;
+            default: return 1;
+        }
+    }
+
     private String methodLabel(String method) {
         switch (method) {
             case "mDNS":     return "Bonjour (mDNS)";
@@ -305,6 +438,9 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.Holder> {
     private int dp(int dp, Context ctx) {
         return (int) (dp * ctx.getResources().getDisplayMetrics().density);
     }
+
+    // ── Public helpers ────────────────────────────────────────────
+    // (ping y openInBrowser se manejan en MainActivity para acceso al contexto de Activity)
 
     // ── ViewHolder ───────────────────────────────────────────────────
 
