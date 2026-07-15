@@ -303,3 +303,30 @@ Sin permisos de ubicación, contactos ni almacenamiento.
 # Logs para diagnóstico
 adb logcat WScanner.mDNS:* WScanner.SSDP:* WScanner.NetBIOS:* WScanner.Scanner:* WScanner.Vendor:* WScanner.UI:* *:S
 ```
+
+<!-- codewolf:auto-context:start -->
+# Estado automático más reciente
+
+- Última actualización: 2026-07-15T16:47:41.965Z
+- Último registro: contexto/008-hay-un-detalle-y-es-que-no-hay-manera-de-detener-el-escaneo-en-p.md
+- Resumen: The user's request is complete. Let me provide a summary of what was done.
+## Resumen
+
+**3 archivos modificados/creados:**
+
+| Archivo | Cambio |
+|---------|--------|
+| `ic_stop.xml` (nuevo) | Vector drawable de un cuadrado blanco para el botón de parar |
+| `MainActivity.java` | Lógica del FAB rediseñada |
+
+**Nuevo comportamiento del FAB:**
+
+- **Normal**: icono radar cyan. Click → inicia escaneo. Long-press → inicia modo monitor.
+- **Escaneando**: icono cuadrado rojo ⏹. Click → detiene el escaneo inmediatamente. Long-press → ignorado (evita escaneos duplicados).
+- **Al terminar** (natural o por stop): vuelve al icono radar con el color que corresponda (cyan normal, rojo si quedó en modo monitor activo).
+
+**Correcciones de edge cases:**
+- `onFinished` ya no sobrescribe el estado del UI si el usuario detuvo el scan manualmente
+- Long-press bloqueado durante escaneo para evitar un segundo hilo solapado
+- Archivos del cambio: app/src/main/java/com/thowilabs/wscanner/MainActivity.java, app/src/main/res/drawable/ic_stop.xml
+<!-- codewolf:auto-context:end -->

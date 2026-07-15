@@ -98,6 +98,9 @@ public class MainActivity extends AppCompatActivity
     // Pulse animation for empty state radar
     private ObjectAnimator emptyPulseAnim;
 
+    // Scan state
+    private boolean isScanning = false;
+
     // Active scan mode (monitoreo continuo)
     private NetworkScanner networkScanner;
     private boolean activeScanMode = false;
@@ -164,11 +167,12 @@ public class MainActivity extends AppCompatActivity
         // Mostrar info de red actual
         updateNetworkInfo();
 
-        // FAB click with haptic feedback
+        // FAB click: stop if scanning, start if idle
         btnScan.setOnClickListener(v -> {
             HapticUtil.performConfirm(btnScan);
-            if (activeScanMode) {
-                stopActiveScan();
+            if (isScanning) {
+                if (activeScanMode) stopActiveScan();
+                setScanning(false);
             } else {
                 startScan();
             }
@@ -176,6 +180,7 @@ public class MainActivity extends AppCompatActivity
 
         // FAB long-press to toggle active scan (monitor mode)
         btnScan.setOnLongClickListener(v -> {
+            if (isScanning) return true;  // already scanning, ignore long-press
             HapticUtil.performHeavy(btnScan);
             toggleActiveScan();
             Toast.makeText(this,
@@ -434,11 +439,12 @@ public class MainActivity extends AppCompatActivity
             @Override
             public void onFinished(int totalFound) {
                 runOnUiThread(() -> {
-                    setScanning(false);
-                    txtStatus.setText("Escaneo completo — " + totalFound + " dispositivo(s)");
-                    txtDeviceCount.setText(String.valueOf(devices.size()));
-
-                    HapticUtil.performHeavy(btnScan);
+                    if (isScanning) {  // don't overwrite UI if user already stopped
+                        setScanning(false);
+                        txtStatus.setText("Escaneo completo — " + totalFound + " dispositivo(s)");
+                        txtDeviceCount.setText(String.valueOf(devices.size()));
+                        HapticUtil.performHeavy(btnScan);
+                    }
 
                     if (activeScanMode) {
                         activeScanHandler.postDelayed(() -> {
@@ -511,10 +517,14 @@ public class MainActivity extends AppCompatActivity
     }
 
     private void setScanning(boolean scanning) {
-        btnScan.setEnabled(!scanning);
+        isScanning = scanning;
         progressScan.setVisibility(scanning ? View.VISIBLE : View.GONE);
 
         if (scanning) {
+            // Transform FAB into red stop button
+            btnScan.setImageResource(R.drawable.ic_stop);
+            btnScan.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFFF85149));
+
             progressScan.setProgress(0);
             txtStatus.setText("Iniciando escaneo…");
             txtDeviceCount.setText("…");
@@ -532,6 +542,10 @@ public class MainActivity extends AppCompatActivity
                 emptyPulseAnim.start();
             }
         } else {
+            // Restore normal radar icon + appropriate tint
+            btnScan.setImageResource(R.drawable.ic_radar);
+            updateMonitorChipStyle();
+
             if (fabRotationAnim != null && fabRotationAnim.isRunning()) {
                 fabRotationAnim.cancel();
             }
@@ -789,7 +803,7 @@ public class MainActivity extends AppCompatActivity
     }
 
     private void updateEmptyState() {
-        boolean scanning = !btnScan.isEnabled();
+        boolean scanning = isScanning;
 
         if (devices.isEmpty() && !scanning) {
             layoutEmpty.setVisibility(View.VISIBLE);
