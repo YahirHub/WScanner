@@ -427,16 +427,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.Holder>
     // ── Labels ──────────────────────────────────────────────────────
 
     private int discoveryMethodRank(String method) {
-        if (method == null) return 0;
-        switch (method) {
-            case "mDNS": return 7;
-            case "SSDP": return 6;
-            case "NetBIOS": return 5;
-            case "OUI DB": return 4;
-            case "DNS": return 3;
-            case "HTTP": return 2;
-            default: return 1;
-        }
+        return DeviceIdentity.sourceRank(method);
     }
 
     private String methodLabel(String method) {

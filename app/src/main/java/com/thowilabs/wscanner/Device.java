@@ -9,7 +9,7 @@ public class Device {
     public String ip;
     public String mac;
     public String vendor;
-    public String discoveryMethod;   // "mDNS", "SSDP", "NetBIOS", "DNS", "HTTP", "Heurística", "OUI DB"
+    public String discoveryMethod;   // "Local", "mDNS", "SSDP", "NetBIOS", "DNS", "HTTP", "OUI DB", "TCP", "Heurística"
     public String discoveryDetail;  // Valor crudo encontrado (ej: "iPhone-de-Juan.local")
     public int ttl = -1;            // TTL del ping (-1 = no disponible, requiere raw sockets)
     public List<Integer> openPorts = new ArrayList<>();

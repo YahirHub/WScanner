@@ -1,14 +1,16 @@
 # Contexto Maestro — WScanner
 
-**Fecha:** 2026-07-15
-**Versión:** 1.0
-**Última actualización:** 2026-07-15 (tras rediseño responsive + animaciones)
+**Fecha:** 2026-07-20  
+**Versión:** 1.1  
+**Última actualización:** 2026-07-20 (mejora de detección offline y refactor del motor)
 
 ---
 
 ## Resumen ejecutivo
 
-WScanner es un escáner de red local gratuito para Android, diseñado como alternativa libre a Fing. Descubre dispositivos conectados a la red WiFi mediante un motor de escaneo multicapa: ping (ICMP), mDNS (Bonjour/AirPlay/Google Cast), SSDP (UPnP/DLNA/Chromecast), NetBIOS (Windows), HTTP fingerprinting y port scanning. 100% offline, sin anuncios, sin rastreo, sin permisos innecesarios.
+WScanner es una aplicación Android para descubrir dispositivos de una red local. El motor de detección trabaja con señales locales observables —ICMP, TCP, mDNS/DNS-SD, SSDP/UPnP, DNS, NetBIOS y HTTP local— y no necesita consultar APIs ni servicios de Internet para detectar equipos. La base OUI embebida se conserva como enriquecimiento opcional cuando existe una MAC accesible, pero no es requisito del descubrimiento ni de la clasificación.
+
+La aplicación también incluye herramientas independientes de diagnóstico. Algunas, como Speed Test, pueden usar Internet; esto no cambia el carácter local/offline del motor de detección de dispositivos.
 
 ---
 
@@ -18,107 +20,126 @@ WScanner es un escáner de red local gratuito para Android, diseñado como alter
 |---------|-------|
 | Lenguaje | Java 11 |
 | UI toolkit | XML Views (ConstraintLayout, CoordinatorLayout, RecyclerView) |
-| Arquitectura | Single Activity (`MainActivity`) con views embebidas (sin Fragments) |
-| Tema | `Theme.MaterialComponents.DayNight.NoActionBar` (siempre oscuro) |
-| Navegación | Visibility toggling entre Scanner / Device Detail / About |
-| Back handling | Manual (`onBackPressed`) con flags `showingAbout` / `showingDeviceDetail` |
+| Arquitectura | Single Activity con vistas embebidas + clases de dominio/herramientas separadas |
+| Motor de identidad | `DeviceIdentity` centraliza ranking, fusión y clasificación por señales |
+| Tema | `Theme.MaterialComponents.DayNight.NoActionBar` con diseño oscuro |
+| Navegación | Visibility toggling entre Scanner / Device Detail / About / herramientas |
 | compileSdk | 36 |
 | minSdk | 24 (Android 7.0) |
-| targetSdk | 36 (Android 15) |
+| targetSdk | 36 (Android 16) |
 | Gradle | KTS, AGP 9.2.1 |
-| Testing | Solo stubs de ejemplo (no hay tests reales) |
+| Testing | 4 clases de test unitario nuevas para identidad, mDNS, NetBIOS y rango de red |
 
 ---
 
 ## Estructura del proyecto
 
-```
+```text
 WScanner/
 ├── app/
-│   ├── build.gradle.kts               # AGP config, dependencias
+│   ├── build.gradle.kts
 │   ├── src/main/
-│   │   ├── AndroidManifest.xml        # Permisos (INTERNET, WIFI_STATE, MULTICAST)
-│   │   ├── assets/oui_database.json   # 53,371 OUIs (1.6 MB)
+│   │   ├── AndroidManifest.xml
+│   │   ├── assets/oui_database.json   # enriquecimiento opcional, no requisito
 │   │   ├── java/com/thowilabs/wscanner/
-│   │   │   ├── MainActivity.java      # UI principal, navegación, escaneo, transiciones
-│   │   │   ├── NetworkScanner.java    # Orquestador de fases de descubrimiento
-│   │   │   ├── MdnsDiscovery.java     # mDNS/DNS-SD (RFC 6762) manual
-│   │   │   ├── SsdpDiscovery.java     # SSDP M-SEARCH + scoring
-│   │   │   ├── NetBiosDiscovery.java  # NetBIOS NBSTAT query
-│   │   │   ├── VendorResolver.java    # Resolución OUI → vendor
-│   │   │   ├── Device.java            # Modelo de dispositivo
-│   │   │   ├── DeviceAdapter.java     # RecyclerView adapter + Filterable
-│   │   │   ├── HapticUtil.java        # Feedback háptico cross-API
-│   │   │   └── ArpReader.java         # ELIMINADO (código duplicado, nunca usado)
+│   │   │   ├── MainActivity.java
+│   │   │   ├── NetworkScanner.java
+│   │   │   ├── DeviceIdentity.java
+│   │   │   ├── MdnsDiscovery.java
+│   │   │   ├── SsdpDiscovery.java
+│   │   │   ├── NetBiosDiscovery.java
+│   │   │   ├── VendorResolver.java
+│   │   │   ├── Device.java
+│   │   │   ├── DeviceAdapter.java
+│   │   │   ├── HapticUtil.java
+│   │   │   ├── SpeedometerGauge.java
+│   │   │   ├── SpeedTestTool.java
+│   │   │   ├── TracerouteTool.java
+│   │   │   ├── WakeOnLanTool.java
+│   │   │   └── ScanHistory.java
 │   │   └── res/
-│   │       ├── anim/                   # 8 animaciones XML (slide, fade, scale)
-│   │       ├── color/                  # Tinting de drawer
-│   │       ├── drawable/              # 17 drawables (gradients, cards, icons, badges)
-│   │       ├── layout/                # 7 layouts + 3 alternativos por qualifier
-│   │       ├── menu/                  # drawer_menu.xml
-│   │       ├── mipmap-anydpi-v26/     # Launcher icons
-│   │       └── values/                # colors, strings, themes, dimens
-│   └── src/test/ & androidTest/       # Solo stubs Kotlin (no tests reales)
+│   └── src/test/java/com/thowilabs/wscanner/
+│       ├── DeviceIdentityTest.java
+│       ├── MdnsDiscoveryTest.java
+│       ├── NetBiosDiscoveryTest.java
+│       └── NetworkRangeTest.java
 ├── gradle/
-│   ├── libs.versions.toml             # Version catalog
-│   └── wrapper/                       # Gradle wrapper
-├── settings.gradle.kts
-├── build.gradle.kts                   # Root (aplica plugin android-application)
-├── contexto/                          # Documentación de arquitectura (ES)
-├── README.md                          # Documentación en español
-├── knowledge.md                       # Conocimiento rápido del proyecto
-└── sesion.jsonl                       # Log de sesión Codewolf
+├── contexto/
+├── README.md
+└── knowledge.md
 ```
 
 ---
 
-## Fuentes Java (10 clases activas)
+## Fuentes Java (15 clases activas)
 
-| Clase | Líneas | Rol | Estado |
-|-------|--------|-----|--------|
-| `MainActivity.java` | ~500 | UI, navegación, escaneo, transiciones, búsqueda, chips, detail, ping, haptics, shimmer, pulse | **Activa** |
-| `NetworkScanner.java` | ~380 | Orquestador: ping sweep → mDNS → SSDP → ARP → port scan → HTTP → NetBIOS | **Activa** |
-| `MdnsDiscovery.java` | ~520 | mDNS/DNS-SD manual (RFC 6762): service discovery + reverse lookup | **Activa** |
-| `SsdpDiscovery.java` | ~310 | SSDP M-SEARCH + scoring de nombres por IP + XML friendlyName | **Activa** |
-| `NetBiosDiscovery.java` | ~250 | NBSTAT query UDP puerto 137, codificación half-ASCII | **Activa** |
-| `DeviceAdapter.java` | ~350 | RecyclerView adapter + Filterable + Iconics + ripple + StateListAnimator + staggered reveal | **Activa** |
-| `Device.java` | ~50 | Modelo: name, ip, mac, vendor, discoveryMethod, discoveryDetail, ttl, openPorts, serviceNames | **Activa** |
-| `VendorResolver.java` | ~90 | Carga OUI JSON (53k entradas) y resuelve MAC → fabricante | **Activa** |
-| `HapticUtil.java` | ~70 | Feedback háptico cross-API (24-25 legacy, 26+ nativo) | **Activa** |
-| `ArpReader.java` | ~60 | **ELIMINADO** — código duplicado en NetworkScanner | Inactivo |
+| Clase | Rol |
+|-------|-----|
+| `MainActivity.java` | UI, navegación, ciclo de escaneo, detalle, monitor y herramientas |
+| `NetworkScanner.java` | Orquestador del descubrimiento multicapa y cancelación |
+| `DeviceIdentity.java` | Ranking de fuentes, fusión de resultados y clasificación por señales |
+| `MdnsDiscovery.java` | mDNS/DNS-SD manual: service discovery y reverse lookup |
+| `SsdpDiscovery.java` | SSDP M-SEARCH y descripción UPnP local segura |
+| `NetBiosDiscovery.java` | NBSTAT/NetBIOS concurrente |
+| `DeviceAdapter.java` | RecyclerView, filtro y presentación |
+| `Device.java` | Modelo de dispositivo |
+| `VendorResolver.java` | OUI opcional cuando se obtiene una MAC válida |
+| `HapticUtil.java` | Feedback háptico cross-API |
+| `SpeedometerGauge.java` | Vista personalizada para Speed Test |
+| `SpeedTestTool.java` | Prueba de velocidad de conectividad externa |
+| `TracerouteTool.java` | Traceroute UDP |
+| `WakeOnLanTool.java` | Envío de magic packets WoL |
+| `ScanHistory.java` | Historial persistente de escaneos |
+
+`ArpReader.java` no existe en el código actual. La lectura de caché ARP/vecinos está encapsulada como enriquecimiento de mejor esfuerzo dentro de `NetworkScanner`.
 
 ---
 
 ## Pipeline de escaneo (NetworkScanner)
 
+```text
+Fase 0:      Detectar IPv4 local + prefijo real + gateway con ConnectivityManager/LinkProperties
+             Fallback compatible mediante WifiManager/DhcpInfo
+
+Fase 1:      Barrido concurrente del rango
+             ├─ InetAddress.isReachable()
+             └─ fallback TCP en puertos representativos cuando ICMP falla
+
+Fase 1.5:    [PARALELO] mDNS/DNS-SD service discovery
+Fase 1.55:   mDNS reverse lookup sobre candidatos locales
+Fase 1.6:    [PARALELO] SSDP/UPnP M-SEARCH
+             mDNS/SSDP pueden agregar candidatos aunque no hayan respondido al barrido
+
+Fase 2:      Caché ARP/vecinos de mejor esfuerzo
+             └─ MAC/OUI solo enriquecen; no son requisito de detección
+
+Fase 3:      Port scanning concurrente sobre candidatos
+             + clasificación por puertos/servicios observados
+             + HTTP title local únicamente en puertos HTTP abiertos conocidos
+
+Fase 3.5:    NBSTAT/NetBIOS concurrente en candidatos sin identidad fuerte
+
+Final:       Fusionar por IP mediante DeviceIdentity → liberar MulticastLock → onFinished()
 ```
-Fase 0:      Detectar subred + gateway (WifiManager + DhcpInfo)
-Fase 0.5:    Cargar VendorResolver + adquirir MulticastLock
 
-Fase 1:      Ping sweep (254 IPs, 10 hilos, 300ms timeout) → emitir dispositivos básicos
-Fase 1.5:    [PARALELO] mDNS service discovery (PTR _services._dns-sd._udp.local)
-Fase 1.55:   mDNS reverse lookup (PTR X.X.X.X.in-addr.arpa) para cada IP viva
-Fase 1.6:    [PARALELO] SSDP discovery (M-SEARCH a 239.255.255.250:1900)
-
-Fase 2:      ARP (14 métodos) — siempre vacío en Android 10+ (SELinux bloquea /proc/net/arp)
-Fase 3:      Port scanning (15 puertos: 80,443,22,445,8080,23,21,554,1883,53,3389,5900,5000,5353,9100)
-             + HTTP banner grab + extract <title>
-Fase 3.5:    NetBIOS probe (solo IPs sin identificación previa)
-
-Fase 4:      Liberar MulticastLock → onFinished()
-```
+Las redes con más de 1024 hosts utilizables se acotan deliberadamente al `/24` de la IP local. Esto evita barridos activos masivos; revisar si en el futuro se agrega una opción explícita para redes empresariales grandes.
 
 ### Prioridad de descubrimiento (source ranking)
 
-| Prioridad | Método | Puntaje |
-|-----------|--------|---------|
-| 1 | mDNS | 7 |
-| 2 | SSDP | 6 |
-| 3 | NetBIOS | 5 |
-| 4 | OUI DB (MAC) | 4 |
-| 5 | DNS inverso | 3 |
-| 6 | HTTP banner | 2 |
-| 7 | Heurística | 1 |
+| Prioridad | Método | Puntaje base |
+|-----------|--------|--------------|
+| 1 | Local | 100 |
+| 2 | mDNS | 90 |
+| 3 | SSDP | 85 |
+| 4 | NetBIOS | 80 |
+| 5 | DNS | 70 |
+| 6 | HTTP | 60 |
+| 7 | OUI DB opcional | 50 |
+| 8 | TCP | 30 |
+| 9 | Heurística | 10 |
+
+`DeviceIdentity` penaliza nombres genéricos; una fuente con mayor puntaje no reemplaza automáticamente un nombre específico y útil.
+
 
 ---
 
@@ -128,6 +149,7 @@ Fase 4:      Liberar MulticastLock → onFinished()
 
 ```kotlin
 dependencies {
+    testImplementation(libs.junit)
     implementation(libs.androidx.appcompat)     // 1.6.1
     implementation(libs.material)               // 1.10.0
     implementation("androidx.recyclerview:recyclerview:1.4.0")
@@ -241,27 +263,27 @@ Sin permisos de ubicación, contactos ni almacenamiento.
 
 ## Problemas conocidos
 
-1. **Android 10+ bloquea `/proc/net/arp`** — SELinux `proc_net`, `untrusted_app`. Los 14 métodos ARP siempre devuelven 0 resultados. Las MAC de dispositivos no son accesibles sin root.
-2. **AP isolation** — Muchos routers bloquean tráfico multicast entre clientes WiFi. mDNS/SSDP no ven nada en estos casos.
-3. **Timeout total ~22s** — El ping sweep + mDNS + SSDP + port scan + NetBIOS toma ~20-22 segundos en total.
-4. **Sin tests** — Solo existen stubs de ejemplo (`ExampleUnitTest.kt`, `ExampleInstrumentedTest.kt`).
-5. **Sin ProGuard/R8** — `isMinifyEnabled = false` en release.
-6. **`layout_device_detail.xml` tiene un `android:visibility="gone"` en el ScrollView raíz** — El `<include>` en activity_main.xml sobreescribe este ID, por lo que `findViewById(R.id.layoutDeviceDetail)` funciona correctamente.
-7. **Anim XML files no usados** — Los 8 archivos en `res/anim/` existen pero las transiciones usan `TransitionManager` programático.
-8. **w840dp no usa @dimen references** — El layout w840dp hardcodea tamaños en vez de usar `@dimen/chip_text_size` del archivo `values-w840dp/dimens.xml`.
+1. **MAC/OUI no fiables en Android moderno:** la caché ARP/vecinos puede estar vacía o restringida. El motor ya no depende de ella; se conserva solo para enriquecer resultados cuando haya MAC.
+2. **AP/client isolation:** routers y puntos de acceso pueden bloquear tráfico entre clientes, mDNS o SSDP. Ningún escáner desde un cliente puede descubrir por sockets directos equipos que la propia red aísla completamente.
+3. **Multicast dependiente de la red:** mDNS/SSDP requieren que el router y la interfaz permitan multicast; WScanner adquiere `MulticastLock`, pero no puede corregir políticas del AP.
+4. **Redes grandes:** por seguridad y consumo, subredes con más de 1024 hosts se limitan al `/24` alrededor del teléfono.
+5. **Validación Android pendiente:** los tests de lógica pasan con compilación Java local, pero el build Gradle completo no pudo ejecutarse en el entorno de revisión porque el wrapper no pudo resolver `services.gradle.org`.
+6. **Sin ProGuard/R8:** `isMinifyEnabled = false` en release.
+7. **`layout_device_detail.xml` mantiene `android:visibility="gone"` en la raíz:** el include y la navegación actual gestionan su visibilidad en runtime.
+8. **Animaciones XML históricas:** existen recursos en `res/anim/`; parte de las transiciones usa `TransitionManager` programático.
 
 ---
 
 ## Pendientes
 
-- Agregar tests unitarios para el motor de escaneo (`NetworkScanner`, `MdnsDiscovery`, `SsdpDiscovery`)
-- Agregar tests instrumentados para la UI
-- Probar en dispositivo real con varios tipos de dispositivos (Apple, Windows, Smart TV, impresora)
-- Agregar SNMP discovery (puerto 161)
-- Agregar DHCP monitoring para detección pasiva
-- Habilitar R8/ProGuard para release
-- Persistencia de resultados de escaneo (historial)
-- Estadísticas de escaneo (tiempo total, dispositivos por método)
+- Ejecutar tests unitarios, lint y build con Android SDK/Gradle disponibles.
+- Probar en dispositivo real con Android, iOS/macOS, Windows, Smart TV/Chromecast, NAS e impresoras.
+- Validar equipos que bloquean ICMP pero exponen TCP, y dispositivos descubiertos solo por mDNS/SSDP.
+- Probar máscaras `/23`, `/24`, `/25` y comportamiento deliberado en redes grandes.
+- Agregar tests instrumentados para UI y cancelación del escaneo.
+- Revisar permisos de red local al migrar en el futuro a target SDK 37 o superior.
+- Evaluar si se elimina definitivamente `oui_database.json` y `VendorResolver` para reducir tamaño del APK; hoy son opcionales y no condicionan la detección.
+- Habilitar R8/ProGuard para release cuando se prepare distribución.
 
 ---
 
@@ -270,11 +292,13 @@ Sin permisos de ubicación, contactos ni almacenamiento.
 | Archivo | Contenido |
 |---------|-----------|
 | `contexto/01-contexto-inicial.md` | Arquitectura inicial V1 |
-| `contexto/02-motor-escaneo.md` | Fusión de bases OUI (53,371 entradas) |
-| `contexto/03-descubrimiento-multicapa.md` | mDNS + SSDP + NetBIOS discovery |
-| `contexto/04-rediseno-ui-profesional.md` | Rediseño UI oscuro cyber/network |
-| `contexto/05-fase1-mejoras-ux-escaneo.md` | Ordenamiento, búsqueda, detalle, puertos, ping |
-| `contexto/06-rediseno-responsive-animaciones.md` | ConstraintLayout, tablet layouts, transiciones, animaciones |
+| `contexto/02-motor-escaneo.md` | Historia de la base OUI, hoy enriquecimiento opcional |
+| `contexto/03-descubrimiento-multicapa.md` | Introducción histórica de mDNS + SSDP + NetBIOS |
+| `contexto/04-rediseno-ui-profesional.md` | Rediseño UI oscuro |
+| `contexto/05-fase1-mejoras-ux-escaneo.md` | Mejoras de UX y herramientas de escaneo |
+| `contexto/06-rediseno-responsive-animaciones.md` | Layouts responsive y transiciones |
+| `contexto/007-inicializacion-y-actualizacion-del-contexto-del-proyecto.md` | Convención de contexto persistente |
+| `contexto/008-mejora-deteccion-offline-y-refactor-motor.md` | Estado vigente del motor de detección offline y refactor 2026-07-20 |
 
 ---
 
@@ -303,30 +327,3 @@ Sin permisos de ubicación, contactos ni almacenamiento.
 # Logs para diagnóstico
 adb logcat WScanner.mDNS:* WScanner.SSDP:* WScanner.NetBIOS:* WScanner.Scanner:* WScanner.Vendor:* WScanner.UI:* *:S
 ```
-
-<!-- codewolf:auto-context:start -->
-# Estado automático más reciente
-
-- Última actualización: 2026-07-15T16:47:41.965Z
-- Último registro: contexto/008-hay-un-detalle-y-es-que-no-hay-manera-de-detener-el-escaneo-en-p.md
-- Resumen: The user's request is complete. Let me provide a summary of what was done.
-## Resumen
-
-**3 archivos modificados/creados:**
-
-| Archivo | Cambio |
-|---------|--------|
-| `ic_stop.xml` (nuevo) | Vector drawable de un cuadrado blanco para el botón de parar |
-| `MainActivity.java` | Lógica del FAB rediseñada |
-
-**Nuevo comportamiento del FAB:**
-
-- **Normal**: icono radar cyan. Click → inicia escaneo. Long-press → inicia modo monitor.
-- **Escaneando**: icono cuadrado rojo ⏹. Click → detiene el escaneo inmediatamente. Long-press → ignorado (evita escaneos duplicados).
-- **Al terminar** (natural o por stop): vuelve al icono radar con el color que corresponda (cyan normal, rojo si quedó en modo monitor activo).
-
-**Correcciones de edge cases:**
-- `onFinished` ya no sobrescribe el estado del UI si el usuario detuvo el scan manualmente
-- Long-press bloqueado durante escaneo para evitar un segundo hilo solapado
-- Archivos del cambio: app/src/main/java/com/thowilabs/wscanner/MainActivity.java, app/src/main/res/drawable/ic_stop.xml
-<!-- codewolf:auto-context:end -->

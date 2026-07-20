@@ -13,14 +13,14 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
-import java.util.Random;
 import java.util.Set;
 
 /**
  * Descubrimiento de dispositivos mediante mDNS (Multicast DNS / Bonjour).
  *
- * Usa MulticastSocket crudo (RFC 6762) en vez de NsdManager, porque
- * NsdManager en API 34+ (targetSdk 36) requiere ACCESS_LOCAL_NETWORK.
+ * Usa MulticastSocket crudo (RFC 6762) para observar múltiples tipos de servicio
+ * en una sola pasada y mantener compatibilidad desde API 24. En Android 17 / API 37
+ * el acceso LAN amplio requerirá ACCESS_LOCAL_NETWORK cuando la app apunte a ese SDK.
  *
  * Dos modos:
  *   1. Service discovery: PTR _services._dns-sd._udp.local → A
@@ -53,128 +53,97 @@ public class MdnsDiscovery {
             socket = createSocket(localAddr);
             if (socket == null) return results;
 
-            // ── Paso 1: Descubrir tipos de servicio ──
-            Log.d(TAG, "Query PTR: _services._dns-sd._udp.local");
-            byte[] queryServices = buildDnsQuery("_services._dns-sd._udp.local", (short) 12);
-            sendQuery(socket, queryServices);
+            // 1) Descubrir tipos dinámicos. Las respuestas mDNS suelen incluir PTR,
+            // SRV y A adicionales; conservar todo evita consultas redundantes.
+            Set<String> discoveredTypes = new HashSet<>();
+            Map<String, SrvEntry> srvEntries = new HashMap<>();
+            Map<String, String> ipToHost = new HashMap<>();
 
-            // Recibir PTRs → nombres de tipo de servicio (_http._tcp.local, _googlecast._tcp.local...)
+            sendQuery(socket, buildDnsQuery("_services._dns-sd._udp.local", (short) 12));
+            collectDiscoveryResponses(socket, 1200, discoveredTypes, srvEntries, ipToHost);
+
             Set<String> serviceTypes = new HashSet<>();
-            collectPtrResponses(socket, 2000, serviceTypes, null);
-
-            Log.d(TAG, "Tipos de servicio encontrados: " + serviceTypes.size());
-            for (String st : serviceTypes) {
-                Log.v(TAG, "  Service type: " + st);
+            for (String serviceType : discoveredTypes) {
+                String normalized = normalizeServiceType(serviceType);
+                if (isServiceType(normalized)) serviceTypes.add(normalized);
             }
 
-            // ── Paso 2: Para servicios bien conocidos, buscar instancias ──
             String[] wellKnownServices = {
                     "_googlecast._tcp.local",
                     "_airplay._tcp.local",
                     "_raop._tcp.local",
+                    "_spotify-connect._tcp.local",
                     "_http._tcp.local",
+                    "_https._tcp.local",
+                    "_ipp._tcp.local",
+                    "_ipps._tcp.local",
                     "_printer._tcp.local",
+                    "_scanner._tcp.local",
                     "_smb._tcp.local",
                     "_ssh._tcp.local",
                     "_workstation._tcp.local",
                     "_device-info._tcp.local",
                     "_hap._tcp.local",
                     "_homekit._tcp.local",
-                    "_companion-link._tcp.local"
+                    "_companion-link._tcp.local",
+                    "_adb-tls-connect._tcp.local",
+                    "_adb-tls-pairing._tcp.local",
+                    "_androidtvremote2._tcp.local"
             };
+            Collections.addAll(serviceTypes, wellKnownServices);
+            Log.d(TAG, "Tipos mDNS a consultar: " + serviceTypes.size());
 
-            // También añadir los tipos descubiertos dinámicamente
-            for (String st : serviceTypes) {
-                if (st.endsWith(".local") || st.endsWith(".local.")) {
-                    serviceTypes.add(st);
-                }
-            }
-
-            // Incluir servicios descubiertos que no estén en la lista predefinida
-            for (String wt : wellKnownServices) {
-                serviceTypes.add(wt);
-            }
-
-            // ── Paso 3: Para cada tipo de servicio, buscar instancias ──
-            Map<String, String> instanceToType = new HashMap<>();
-            Map<String, Integer> instanceToPort = new HashMap<>();
-
+            // 2) Enviar todas las consultas PTR primero y compartir una sola ventana
+            // de recepción. Esto evita O(n) timeouts que antes podían superar el join
+            // del orquestador y dejar resultados mDNS fuera del escaneo principal.
             for (String serviceType : serviceTypes) {
-                // Query PTR para este tipo de servicio → obtener nombres de instancia
-                byte[] query = buildDnsQuery(serviceType, (short) 12);
                 try {
-                    sendQuery(socket, query);
-                } catch (IOException ignored) { continue; }
-
-                Set<String> instances = new HashSet<>();
-                collectPtrResponses(socket, 800, instances, null);
-
-                for (String inst : instances) {
-                    instanceToType.put(inst, serviceType);
-                }
-                Log.v(TAG, "  " + serviceType + " → " + instances.size() + " instancias");
-            }
-
-            // ── Paso 4: Para cada instancia, resolver SRV → host:port + A → IP ──
-            Map<String, String> hostToInstance = new HashMap<>();
-
-            for (Map.Entry<String, String> e : instanceToType.entrySet()) {
-                String instance = e.getKey();
-                String type = e.getValue();
-
-                // SRV query: instance.type
-                String srvName = instance + "." + type;
-                if (srvName.endsWith(".")) srvName = srvName.substring(0, srvName.length() - 1);
-                if (!srvName.endsWith(".local")) srvName += ".local";
-
-                byte[] srvQuery = buildDnsQuery(srvName, (short) 33);
-                try {
-                    sendQuery(socket, srvQuery);
-                } catch (IOException ignored) { continue; }
-
-                // Recibir SRV response
-                byte[] response = receivePacket(socket, 1000);
-                if (response != null) {
-                    Map<String, SrvEntry> srvResults = parseSrvResponse(response);
-                    for (Map.Entry<String, SrvEntry> sr : srvResults.entrySet()) {
-                        String host = sr.getValue().target;
-                        int port = sr.getValue().port;
-                        hostToInstance.put(host, instance);
-                        instanceToPort.put(instance, port);
-                        Log.d(TAG, "  SRV: " + instance + " → " + host + ":" + port);
-                    }
+                    sendQuery(socket, buildDnsQuery(serviceType, (short) 12));
+                } catch (IOException e) {
+                    Log.v(TAG, "No se pudo consultar " + serviceType + ": " + e.getMessage());
                 }
             }
 
-            // ── Paso 5: Resolver nombres de host a IPs ──
-            for (Map.Entry<String, String> e : hostToInstance.entrySet()) {
-                String hostname = e.getKey();
-                String instance = e.getValue();
+            Set<String> ptrNames = new HashSet<>();
+            collectDiscoveryResponses(socket, 1800, ptrNames, srvEntries, ipToHost);
 
-                String queryName = hostname;
-                if (!queryName.endsWith(".local") && !queryName.endsWith(".")) {
-                    queryName += ".local";
-                }
+            Set<String> instances = new HashSet<>();
+            for (String ptrName : ptrNames) {
+                if (isServiceInstanceName(ptrName)) instances.add(ptrName);
+            }
+            Log.d(TAG, "Instancias mDNS encontradas: " + instances.size());
 
-                byte[] aQuery = buildDnsQuery(queryName, (short) 1); // A record
+            // 3) Solicitar SRV de todas las instancias en lote. Muchas respuestas ya
+            // llegaron como adicionales en el paso anterior; repetir la consulta es
+            // barato y mejora cobertura frente a responders parciales.
+            for (String instance : instances) {
                 try {
-                    sendQuery(socket, aQuery);
-                } catch (IOException ignored) { continue; }
-
-                byte[] response = receivePacket(socket, 1000);
-                if (response != null) {
-                    Map<String, String> aResults = parseDnsResponse(response);
-                    for (Map.Entry<String, String> ar : aResults.entrySet()) {
-                        String displayName;
-                        if (instance.endsWith(".")) instance = instance.substring(0, instance.length() - 1);
-                        displayName = instance;
-                        results.put(ar.getKey(), displayName);
-                        Log.i(TAG, "  🏷️  mDNS: " + ar.getKey() + " → " + displayName);
-                    }
+                    sendQuery(socket, buildDnsQuery(normalizeSrvQueryName(instance, ""), (short) 33));
+                } catch (IOException e) {
+                    Log.v(TAG, "No se pudo resolver SRV de " + instance + ": " + e.getMessage());
                 }
             }
+            collectDiscoveryResponses(socket, 1800, null, srvEntries, ipToHost);
 
-            socket.leaveGroup(InetAddress.getByName(MDNS_ADDR));
+            Map<String, String> hostToInstance = buildHostToInstance(srvEntries);
+            mergeResolvedHosts(results, ipToHost, hostToInstance);
+
+            // 4) Pedir A únicamente para targets SRV todavía no resueltos. También se
+            // hace en lote para mantener el tiempo total acotado.
+            Set<String> resolvedHosts = new HashSet<>();
+            for (String host : ipToHost.values()) resolvedHosts.add(cleanDotLocal(host));
+            for (String host : hostToInstance.keySet()) {
+                if (resolvedHosts.contains(host)) continue;
+                try {
+                    sendQuery(socket, buildDnsQuery(host + ".local", (short) 1));
+                } catch (IOException e) {
+                    Log.v(TAG, "No se pudo resolver A de " + host + ": " + e.getMessage());
+                }
+            }
+            collectDiscoveryResponses(socket, 1500, null, srvEntries, ipToHost);
+            mergeResolvedHosts(results, ipToHost, buildHostToInstance(srvEntries));
+
+            leaveGroup(socket, localAddr);
 
         } catch (IOException e) {
             Log.e(TAG, "Error en mDNS: " + e.getMessage(), e);
@@ -238,9 +207,9 @@ public class MdnsDiscovery {
 
             Log.d(TAG, "Reverse lookup: " + recovered + " respuestas con IP");
 
-            socket.leaveGroup(InetAddress.getByName(MDNS_ADDR));
+            leaveGroup(socket, localAddr);
 
-        } catch (IOException e) {
+        } catch (Exception e) {
             Log.e(TAG, "Error en reverse mDNS: " + e.getMessage(), e);
         } finally {
             if (socket != null) {
@@ -255,9 +224,10 @@ public class MdnsDiscovery {
 
     private static MulticastSocket createSocket(InetAddress localAddr) {
         try {
-            MulticastSocket socket = new MulticastSocket(MDNS_PORT);
-            socket.setSoTimeout(TIMEOUT_MS);
+            MulticastSocket socket = new MulticastSocket(null);
             socket.setReuseAddress(true);
+            socket.bind(new InetSocketAddress(MDNS_PORT));
+            socket.setSoTimeout(TIMEOUT_MS);
 
             NetworkInterface netIf = NetworkInterface.getByInetAddress(localAddr);
             if (netIf != null) {
@@ -265,12 +235,20 @@ public class MdnsDiscovery {
                 socket.joinGroup(new InetSocketAddress(group, MDNS_PORT), netIf);
                 Log.d(TAG, "Unido a grupo multicast " + MDNS_ADDR + " en " + netIf.getDisplayName());
             } else {
-                socket.joinGroup(InetAddress.getByName(MDNS_ADDR));
+                socket.joinGroup(new InetSocketAddress(InetAddress.getByName(MDNS_ADDR), MDNS_PORT), null);
             }
             return socket;
         } catch (IOException e) {
             Log.e(TAG, "Error creando socket mDNS: " + e.getMessage());
             return null;
+        }
+    }
+
+    private static void leaveGroup(MulticastSocket socket, InetAddress localAddr) {
+        try {
+            NetworkInterface netIf = NetworkInterface.getByInetAddress(localAddr);
+            socket.leaveGroup(new InetSocketAddress(InetAddress.getByName(MDNS_ADDR), MDNS_PORT), netIf);
+        } catch (Exception ignored) {
         }
     }
 
@@ -280,9 +258,10 @@ public class MdnsDiscovery {
      * Recibe respuestas PTR y recolecta los nombres PTR.
      * Si ipResults != null, también recolecta mapeos IP → nombre.
      */
-    private static void collectPtrResponses(MulticastSocket socket, int timeoutMs,
-                                            Set<String> ptrNames,
-                                            Map<String, String> ipResults) {
+    private static void collectDiscoveryResponses(MulticastSocket socket, int timeoutMs,
+                                                  Set<String> ptrNames,
+                                                  Map<String, SrvEntry> srvEntries,
+                                                  Map<String, String> ipToHost) {
         long deadline = System.currentTimeMillis() + timeoutMs;
         while (System.currentTimeMillis() < deadline) {
             int remaining = (int) (deadline - System.currentTimeMillis());
@@ -290,31 +269,55 @@ public class MdnsDiscovery {
             byte[] response = receivePacket(socket, remaining);
             if (response == null) break;
 
-            try {
-                if (response.length < 12) continue;
+            if (ptrNames != null) extractPtrNames(response, ptrNames);
+            if (srvEntries != null) srvEntries.putAll(parseSrvResponse(response));
+            if (ipToHost != null) ipToHost.putAll(parseDnsResponse(response));
+        }
+    }
 
-                int ancount = ((response[6] & 0xFF) << 8) | (response[7] & 0xFF);
-                if (ancount == 0) {
-                    // También mirar additional records (no los contamos en ancount pero no importa)
-                    int arcount = ((response[10] & 0xFF) << 8) | (response[11] & 0xFF);
-                    if (arcount == 0) continue;
-                }
-
-                Map<String, String> parsed = parseDnsResponse(response);
-
-                if (ipResults != null) {
-                    ipResults.putAll(parsed);
-                }
-
-                // Extraer nombres PTR del response (para service discovery)
-                if (ptrNames != null) {
-                    extractPtrNames(response, ptrNames);
-                }
-
-            } catch (Exception ex) {
-                Log.v(TAG, "Error recolectando PTR: " + ex.getMessage());
+    private static Map<String, String> buildHostToInstance(Map<String, SrvEntry> srvEntries) {
+        Map<String, String> hostToInstance = new HashMap<>();
+        for (Map.Entry<String, SrvEntry> entry : srvEntries.entrySet()) {
+            String host = cleanDotLocal(entry.getValue().target);
+            String instance = cleanServiceInstanceName(entry.getKey());
+            if (!host.isEmpty() && !instance.isEmpty()) {
+                hostToInstance.put(host, instance);
             }
         }
+        return hostToInstance;
+    }
+
+    private static void mergeResolvedHosts(Map<String, String> results,
+                                           Map<String, String> ipToHost,
+                                           Map<String, String> hostToInstance) {
+        for (Map.Entry<String, String> entry : ipToHost.entrySet()) {
+            String host = cleanDotLocal(entry.getValue());
+            String instance = hostToInstance.get(host);
+            if (instance != null && !instance.isEmpty()) {
+                results.put(entry.getKey(), instance);
+                Log.i(TAG, "  🏷️  mDNS: " + entry.getKey() + " → " + instance);
+            }
+        }
+    }
+
+    static String normalizeServiceType(String serviceType) {
+        String type = cleanDotLocal(serviceType);
+        if (type.isEmpty()) return "";
+        return type + ".local";
+    }
+
+    static boolean isServiceType(String value) {
+        if (value == null) return false;
+        String clean = cleanDotLocal(value).toLowerCase(java.util.Locale.ROOT);
+        return clean.startsWith("_") && (clean.endsWith("._tcp") || clean.endsWith("._udp"));
+    }
+
+    static boolean isServiceInstanceName(String value) {
+        if (value == null) return false;
+        String clean = cleanDotLocal(value).toLowerCase(java.util.Locale.ROOT);
+        int first = clean.indexOf("._");
+        if (first <= 0) return false;
+        return clean.indexOf("._", first + 2) > first;
     }
 
     /**
@@ -373,14 +376,45 @@ public class MdnsDiscovery {
         }
     }
 
+
+    static String cleanServiceInstanceName(String instance, String serviceType) {
+        String inst = cleanDotLocal(instance);
+        String type = cleanDotLocal(serviceType);
+        String suffix = "." + type;
+        if (!type.isEmpty() && inst.toLowerCase(java.util.Locale.ROOT)
+                .endsWith(suffix.toLowerCase(java.util.Locale.ROOT))) {
+            inst = inst.substring(0, inst.length() - suffix.length());
+        }
+        return inst.trim();
+    }
+
+    static String cleanServiceInstanceName(String instance) {
+        String inst = cleanDotLocal(instance);
+        return inst.replaceFirst("(?i)\\._[^.]+\\._(?:tcp|udp)$", "").trim();
+    }
+
+    static String normalizeSrvQueryName(String instance, String serviceType) {
+        String inst = cleanDotLocal(instance);
+        String type = cleanDotLocal(serviceType);
+        if (inst.isEmpty()) return type + ".local";
+
+        String lowerInst = inst.toLowerCase(java.util.Locale.ROOT);
+        String lowerType = type.toLowerCase(java.util.Locale.ROOT);
+        if (lowerInst.endsWith(lowerType) || lowerInst.contains("._tcp") || lowerInst.contains("._udp")) {
+            return inst + ".local";
+        }
+        return inst + "." + type + ".local";
+    }
+
     // ═══════════════════════ DNS Packet Builder ═══════════════════
 
     static byte[] buildDnsQuery(String name, short qtype) {
         try {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
-            short txId = (short) new Random().nextInt(65536);
-            out.write((txId >> 8) & 0xFF);
-            out.write(txId & 0xFF);
+            // mDNS multicast usa transaction ID 0; evita depender de IDs aleatorios
+            // que algunos responders ignoran en tráfico multicast.
+            out.write(0x00);
+            out.write(0x00);
             out.write(0x00); out.write(0x00); // flags
             out.write(0x00); out.write(0x01); // QDCOUNT=1
             out.write(0x00); out.write(0x00); // ANCOUNT=0
@@ -469,6 +503,9 @@ public class MdnsDiscovery {
                     if (!host.isEmpty() && isValidHostname(host)) {
                         hostToIp.put(host, ip);
                         ipToHost.put(ip, host);
+                        // Un A record ya es evidencia válida IP → hostname. La versión
+                        // anterior lo guardaba en mapas temporales pero nunca lo publicaba.
+                        results.put(ip, host);
                     }
                 } else if (rtype == 12) {
                     // PTR — puede ser reverse (in-addr.arpa) o service discovery

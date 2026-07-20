@@ -28,3 +28,8 @@ Cargado con org.json nativo de Android, sin dependencias externas.
 - mDNS/Bonjour discovery para nombres de dispositivos locales
 - HTTP fingerprinting para identificar routers/NAS/cámaras por banner
 - UPnP/SSDP discovery
+
+
+## Estado actual 2026-07-20
+
+La base OUI se conserva como enriquecimiento local opcional. El motor de detección actual no depende de MAC/OUI para descubrir ni clasificar dispositivos, ya que Android moderno puede no exponer la tabla de vecinos a aplicaciones normales. El pipeline vigente está documentado en `008-mejora-deteccion-offline-y-refactor-motor.md`.

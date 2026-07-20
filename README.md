@@ -1,111 +1,123 @@
 # WScanner
 
-**Escáner de red local gratuito para Android — sin anuncios, sin rastreo.**
+Escáner de red local para Android, sin anuncios ni analíticas. El motor de detección funciona dentro de la red local y no consulta APIs, servicios remotos ni bases de datos en Internet para descubrir dispositivos.
 
-WScanner descubre todos los dispositivos conectados a tu red WiFi con un motor de escaneo multicapa: ping, mDNS (Bonjour), SSDP (UPnP), NetBIOS, HTTP fingerprinting y más. Diseñado como alternativa libre a Fing, 100% offline y sin permisos innecesarios.
+## Características
 
-<p align="center">
-  <img src="docs/screenshot_light.png" width="280" alt="WScanner escaneo">
-</p>
+- **Descubrimiento multicapa local:** alcance ICMP, comprobación TCP, mDNS/DNS-SD, SSDP/UPnP, DNS inverso, NetBIOS, puertos y metadatos HTTP locales.
+- **Detección de equipos que bloquean ping:** un host puede incorporarse por respuesta TCP, mDNS o SSDP aunque no conteste ICMP.
+- **Subred real:** usa la dirección IPv4 y prefijo reportados por Android en lugar de asumir siempre `/24`.
+- **Identidad por señales observadas:** combina nombres y tipos detectados por protocolos y servicios locales, sin depender de diccionarios de fabricantes.
+- **Resultados progresivos:** los dispositivos aparecen y se enriquecen durante el escaneo.
+- **Fusión estable de identidad:** una señal genérica posterior no reemplaza un nombre específico de mejor calidad.
+- **Cancelación real del escaneo:** detener el escaneo invalida el trabajo activo y evita seguir publicando resultados obsoletos.
+- **Privacidad:** sin anuncios, sin analíticas y sin permisos de ubicación, contactos o almacenamiento.
 
----
+> La detección de dispositivos es local/offline. Herramientas independientes como la prueba de velocidad sí pueden necesitar acceso a Internet para medir conectividad externa.
 
-## ✨ Características
-
-- 🔍 **Descubrimiento multicapa** — ping ARP + mDNS (Bonjour/AirPlay/Google Cast) + SSDP (UPnP/DLNA/Chromecast) + NetBIOS (Windows) + HTTP fingerprinting
-- ⚡ **Reporte progresivo** — los dispositivos aparecen en tiempo real conforme se descubren, sin esperar al final
-- 🏷️ **Nombres inteligentes** — prioriza mDNS (nombres .local) > SSDP (marcas/modelos) > NetBIOS > DNS > heurística de puertos
-- 🎨 **Interfaz oscura profesional** — Material Design 3 con paleta cyber, Iconics (Material Design Community), tarjetas premium
-- 📋 **Tap para copiar IP** — toca cualquier dispositivo y copia su IP al portapapeles
-- 📡 **Sin dependencias externas** — mDNS, SSDP y NetBIOS implementados con `java.net` estándar, cero librerías de red
-- 🔒 **Privacidad primero** — sin anuncios, sin analíticas, sin permisos de ubicación/contactos/almacenamiento
-
----
-
-## 🛠️ Tecnología
+## Tecnología
 
 | Capa | Tecnología |
 |---|---|
 | Lenguaje | Java 11 |
-| UI | Material Design 3, CoordinatorLayout, RecyclerView, Iconics 5.5 |
-| Red | `java.net` (MulticastSocket, DatagramPacket, InetAddress) |
-| Protocolos | ICMP (ping), mDNS/DNS-SD (RFC 6762), SSDP (UPnP), NetBIOS (NBNS), HTTP |
-| Build | Gradle KTS, Android Gradle Plugin |
+| UI | Material Components, CoordinatorLayout, RecyclerView, Iconics |
+| Red | `java.net` y APIs de conectividad de Android |
+| Protocolos | ICMP, TCP, mDNS/DNS-SD, SSDP/UPnP, DNS, NetBIOS/NBNS, HTTP |
+| Build | Gradle KTS, Android Gradle Plugin 9.2.1 |
 | Min SDK | 24 (Android 7.0) |
-| Target SDK | 36 (Android 15) |
+| Compile/Target SDK | 36 (Android 16) |
 
----
+## Permisos
 
-## 📦 Instalación
+El manifiesto declara:
 
-Descarga el APK desde [GitHub Releases](https://github.com/thowilabs/wscanner/releases) e instálalo en tu dispositivo Android.
+- `INTERNET`: necesario para sockets TCP/UDP y HTTP, incluidos destinos de la red local.
+- `ACCESS_NETWORK_STATE`: consulta del estado y propiedades de red.
+- `ACCESS_WIFI_STATE`: compatibilidad con información WiFi y fallback de IP/gateway.
+- `CHANGE_WIFI_MULTICAST_STATE`: `MulticastLock` para recibir mDNS/SSDP de forma fiable en WiFi.
 
-> **Nota:** La app solo requiere el permiso `INTERNET` y `ACCESS_WIFI_STATE`. No necesita ubicación, contactos ni almacenamiento.
+No solicita ubicación, contactos ni almacenamiento.
 
----
+## Estructura principal
 
-## 🏗️ Estructura del proyecto
-
-```
+```text
 WScanner/
 ├── app/
 │   ├── src/main/java/com/thowilabs/wscanner/
-│   │   ├── MainActivity.java          # UI principal, DrawerLayout, RecyclerView
-│   │   ├── NetworkScanner.java        # Orquestador de fases de descubrimiento
-│   │   ├── MdnsDiscovery.java         # mDNS/DNS-SD manual (RFC 6762)
-│   │   ├── SsdpDiscovery.java         # SSDP M-SEARCH + scoring por IP
-│   │   ├── NetBiosDiscovery.java      # NetBIOS NBNS (puerto 137)
-│   │   ├── ArpReader.java             # Lectura ARP (14 métodos)
-│   │   ├── VendorResolver.java        # Resolución OUI (53,371 entradas)
+│   │   ├── MainActivity.java          # UI, navegación y ciclo de escaneo
+│   │   ├── NetworkScanner.java        # Orquestador del descubrimiento multicapa
+│   │   ├── DeviceIdentity.java        # Fusión y clasificación por señales observadas
+│   │   ├── MdnsDiscovery.java         # mDNS/DNS-SD manual
+│   │   ├── SsdpDiscovery.java         # SSDP/UPnP y descripción XML local segura
+│   │   ├── NetBiosDiscovery.java      # NBSTAT/NetBIOS concurrente
+│   │   ├── VendorResolver.java        # Enriquecimiento OUI opcional si existe MAC
 │   │   ├── Device.java                # Modelo de dispositivo
-│   │   └── DeviceAdapter.java         # Adaptador RecyclerView + Iconics
-│   └── src/main/res/                  # Layouts, drawables, themes, colores
-├── oui_data/                          # Fuentes OUI (Wireshark, Nmap, IEEE)
-└── contexto/                          # Documentación de arquitectura
+│   │   └── DeviceAdapter.java         # Presentación y filtrado de dispositivos
+│   ├── src/main/assets/
+│   │   └── oui_database.json          # Enriquecimiento legado opcional; no requerido
+│   └── src/test/java/com/thowilabs/wscanner/
+│       ├── DeviceIdentityTest.java
+│       ├── MdnsDiscoveryTest.java
+│       ├── NetBiosDiscoveryTest.java
+│       └── NetworkRangeTest.java
+├── contexto/                          # Contexto persistente y decisiones técnicas
+├── knowledge.md                       # Resumen operativo del proyecto
+└── README.md
 ```
 
----
+## Cómo funciona la detección
 
-## 🔬 Cómo funciona
+1. **Detecta la red IPv4 activa** mediante `ConnectivityManager`, `LinkProperties` y `LinkAddress`; conserva un fallback compatible con APIs/ROMs antiguas.
+2. **Construye el rango de hosts** según el prefijo real. Para redes de más de 1024 hosts limita el escaneo activo al `/24` alrededor del teléfono para evitar barridos masivos accidentales.
+3. **Comprueba presencia** con `InetAddress.isReachable()` y, si falla, intenta una lista pequeña de puertos TCP frecuentes.
+4. **Ejecuta mDNS y SSDP en paralelo.** Sus respuestas pueden incorporar dispositivos aunque no hayan respondido al barrido inicial.
+5. **Consulta mDNS inverso** sobre los candidatos locales encontrados.
+6. **Lee la caché ARP/vecinos como enriquecimiento opcional.** La detección no depende de obtener MAC.
+7. **Escanea puertos en paralelo** y clasifica el tipo de equipo mediante protocolos/servicios observados.
+8. **Obtiene títulos HTTP locales** solo sobre puertos HTTP abiertos conocidos.
+9. **Consulta NetBIOS concurrentemente** en candidatos que todavía no tienen una identidad fuerte.
+10. **Fusiona resultados por IP** usando una prioridad de fuentes y evitando degradar nombres específicos.
 
-WScanner ejecuta un pipeline de descubrimiento en fases:
+### Prioridad de identidad
 
-1. **Ping sweep** — ICMP echo a toda la subred en paralelo
-2. **mDNS Service Discovery** — PTR `_services._dns-sd._udp.local` → tipos → instancias → SRV → A
-3. **mDNS Reverse Lookup** — PTR `X.X.X.X.in-addr.arpa` para cada IP viva
-4. **SSDP M-SEARCH** — multicast 239.255.255.250:1900, scoring de nombres por IP
-5. **ARP** — lectura de tablas ARP del sistema (limitado en Android 10+)
-6. **Port scan + HTTP** — puertos comunes (80, 443, 8080, 554, etc.), fingerprinting HTTP
-7. **NetBIOS** — NBSTAT query UDP puerto 137
+`Local > mDNS > SSDP > NetBIOS > DNS > HTTP > OUI opcional > TCP > heurística`
 
-Cada fase emite resultados en tiempo real. Si una fase posterior descubre mejor información (ej. mDNS da nombre .local), se actualiza la tarjeta del dispositivo existente.
+La prioridad no es absoluta: un nombre genérico de una fuente superior no reemplaza automáticamente una identidad específica ya conocida.
 
----
-
-## 🧑‍💻 Desarrollo
+## Desarrollo
 
 ```bash
-# Clonar
-git clone https://github.com/thowilabs/wscanner.git
-cd wscanner
+# Tests unitarios
+./gradlew :app:testDebugUnitTest
 
-# Compilar (requiere Android SDK)
-./gradlew assembleDebug
+# Compilar APK debug
+./gradlew :app:assembleDebug
 
-# Instalar en dispositivo conectado
-./gradlew installDebug
+# Lint
+./gradlew :app:lintDebug
+
+# Instalar en un dispositivo conectado
+./gradlew :app:installDebug
 ```
 
-Abre el proyecto en Android Studio Hedgehog o superior.
+En Windows también pueden usarse los mismos objetivos con `gradlew.bat`.
 
----
+### Logs de diagnóstico
 
-## 📄 Licencia
+```bash
+adb logcat WScanner.mDNS:* WScanner.SSDP:* WScanner.NetBIOS:* WScanner.Scanner:* WScanner.UI:* *:S
+```
 
-MIT © 2025 [Thowilabs](https://thowilabs.com)
+## Pruebas recomendadas en dispositivo real
 
----
+Probar al menos una red con una combinación de router, Android/iOS, Windows/macOS, Smart TV/Chromecast, NAS y/o impresora. Verificar especialmente que:
 
-<p align="center">
-  <sub>Desarrollado por Thowilabs · Alternativa gratuita, sin anuncios ni rastreo</sub>
-</p>
+- aparezcan equipos que bloquean ICMP pero exponen un servicio TCP;
+- mDNS/SSDP incorporen dispositivos no detectados por ping;
+- los nombres no empeoren cuando llegan varias fuentes para la misma IP;
+- detener el escaneo no siga agregando resultados del trabajo cancelado;
+- la aplicación funcione aunque la caché ARP esté vacía y no haya MAC disponible.
+
+## Licencia
+
+MIT © 2025 Thowilabs

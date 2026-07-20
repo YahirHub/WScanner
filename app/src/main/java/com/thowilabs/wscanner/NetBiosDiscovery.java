@@ -6,11 +6,14 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Descubrimiento de nombres NetBIOS via NBSTAT query (UDP puerto 137).
@@ -18,8 +21,8 @@ import java.util.Set;
  * Envía un Node Status Request a cada IP y parsea la respuesta
  * para extraer el nombre NetBIOS principal de la máquina.
  *
- * Solo se ejecuta para IPs que tienen puerto 445 (SMB) o 139 (NetBIOS) abierto,
- * ya que enviar a IPs sin servicio NetBIOS es tráfico innecesario.
+ * El orquestador lo usa sobre candidatos locales todavía sin una identidad fuerte.
+ * Las consultas se ejecutan en paralelo y tienen timeout corto por host.
  */
 public class NetBiosDiscovery {
 
@@ -30,39 +33,46 @@ public class NetBiosDiscovery {
     /**
      * Consulta nombres NetBIOS para las IPs dadas.
      *
-     * @param ips        IPs a consultar (pre-filtradas: puerto 445/139 abierto)
+     * @param ips        IPs locales candidatas a consultar
      * @return Map IP → nombre NetBIOS
      */
     public static Map<String, String> discover(Set<String> ips) {
-        Map<String, String> results = new HashMap<>();
+        Map<String, String> results = new ConcurrentHashMap<>();
         long t0 = System.currentTimeMillis();
 
         Log.i(TAG, "═══════════════════════════════════════");
         Log.i(TAG, "🟠 Iniciando NetBIOS probe en " + ips.size() + " IPs");
 
         if (ips.isEmpty()) {
-            Log.d(TAG, "Sin IPs para consultar (sin puertos SMB/NetBIOS)");
+            Log.d(TAG, "Sin IPs para consultar");
             return results;
         }
 
-        int probed = 0;
-        int responded = 0;
-
+        int workers = Math.min(12, Math.max(1, ips.size()));
+        ExecutorService executor = Executors.newFixedThreadPool(workers);
         for (String ip : ips) {
-            probed++;
-            String name = probeNetBios(ip);
-            if (name != null) {
-                results.put(ip, name);
-                responded++;
-                Log.i(TAG, "  🏷️  NetBIOS: " + ip + " → " + name);
-            }
+            executor.execute(() -> {
+                String name = probeNetBios(ip);
+                if (name != null) {
+                    results.put(ip, name);
+                    Log.i(TAG, "  🏷️  NetBIOS: " + ip + " → " + name);
+                }
+            });
+        }
+        executor.shutdown();
+        try {
+            executor.awaitTermination(Math.max(2, ips.size() / workers + 1), TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            executor.shutdownNow();
         }
 
         long elapsed = System.currentTimeMillis() - t0;
         Log.i(TAG, "✅ NetBIOS completado en " + elapsed + " ms — "
-                + probed + " consultados, " + responded + " respuestas");
+                + ips.size() + " consultados, " + results.size() + " respuestas");
         Log.i(TAG, "═══════════════════════════════════════");
-        return results;
+        return new HashMap<>(results);
     }
 
     /**
@@ -118,7 +128,7 @@ public class NetBiosDiscovery {
      *   - Query type (2 bytes, 0x0021 = NBSTAT)
      *   - Query class (2 bytes, 0x0001 = IN)
      */
-    private static byte[] buildNbstatQuery() {
+    static byte[] buildNbstatQuery() {
         byte[] query = new byte[50];
 
         // Transaction ID aleatorio
@@ -152,9 +162,12 @@ public class NetBiosDiscovery {
         // "*" = 0x2A → 'C' (0x2 + 0x41) + 'K' (0xA + 0x41)
         String encodedName = encodeNetBiosName("*");
         byte[] nameBytes = encodedName.getBytes(java.nio.charset.StandardCharsets.US_ASCII);
-        System.arraycopy(nameBytes, 0, query, 12, nameBytes.length);
+        // Nombre DNS-style: longitud 0x20 + 32 bytes half-ASCII + terminador 0x00.
+        // La versión anterior omitía longitud/terminador y generaba una consulta inválida.
+        query[12] = 0x20;
+        System.arraycopy(nameBytes, 0, query, 13, nameBytes.length);
+        query[45] = 0x00;
 
-        // Posición después del nombre: 12 + 34 = 46 (el nombre ocupa 34 bytes en total)
         // Query type: NBSTAT = 0x0021
         query[46] = 0x00;
         query[47] = 0x21;
@@ -212,77 +225,86 @@ public class NetBiosDiscovery {
      *     - Names array: cada nombre = 15 bytes padded + 1 byte type + 2 bytes flags
      *   Cada entrada de nombre: 18 bytes
      */
-    private static String parseNbstatResponse(byte[] data, int length) {
+    static String parseNbstatResponse(byte[] data, int length) {
         try {
-            // Saltar header DNS (12 bytes) + name (34 bytes) + tipo/clase/ttl/datalen
-            // Header = 12
-            // Answer name = 34 bytes (wildcard response)
-            // Answer type = 2 bytes (0x0021)
-            // Answer class = 2 bytes (0x0001)
-            // TTL = 4 bytes
-            // Data length = 2 bytes
-            // Total header = 12 + 34 + 2 + 2 + 4 + 2 = 56 bytes
-            int pos = 56;
+            if (data == null || length < 12) return null;
 
-            if (pos >= length) return null;
+            int qdCount = readU16(data, 4);
+            int anCount = readU16(data, 6);
+            int pos = 12;
 
-            // Number of names (1 byte)
-            int numNames = data[pos] & 0xFF;
-            pos++;
-
-            if (pos + (numNames * 18) > length) return null;
-
-            // Buscar el primer nombre unique + active (flags == 0x0400 o 0x0000 como UNIQUE)
-            // Estructura de cada entrada (18 bytes):
-            //   - Name (15 bytes ASCII, padded with spaces)
-            //   - Type suffix (1 byte)
-            //   - Flags (2 bytes): bit 15 = group (1) o unique (0), bit 7 = active
-            //     Flags little-endian: byte0 = flags lo, byte1 = flags hi
-            String candidateName = null;
-
-            for (int i = 0; i < numNames; i++) {
-                int nameStart = pos + (i * 18);
-
-                // Extraer nombre (15 bytes)
-                byte[] nameBytes = new byte[15];
-                System.arraycopy(data, nameStart, nameBytes, 0, 15);
-                String rawName = new String(nameBytes, "US-ASCII").trim();
-
-                // Type suffix (byte 15)
-                int typeSuffix = data[nameStart + 15] & 0xFF;
-
-                // Flags (bytes 16-17, little-endian)
-                int flagsLo = data[nameStart + 16] & 0xFF;
-                int flagsHi = data[nameStart + 17] & 0xFF;
-                int flags = (flagsHi << 8) | flagsLo;
-
-                boolean isUnique = (flags & 0x8000) == 0; // bit 15 = 0 → unique name
-                boolean isActive = (flags & 0x0080) != 0;  // bit 7 = active
-
-                Log.v(TAG, "    NB name: \"" + rawName + "\" type=" + typeSuffix
-                        + " flags=0x" + Integer.toHexString(flags)
-                        + " unique=" + isUnique + " active=" + isActive);
-
-                // Ignorar nombres de servicio (type >= 0x20)
-                // Tipos comunes: 0x00 = workstation, 0x03 = messenger, 0x20 = server
-                if (isUnique && isActive && !rawName.isEmpty()) {
-                    // Preferir workstation name (type 0x00) sobre messenger (0x03)
-                    if (typeSuffix == 0x00) {
-                        Log.v(TAG, "    ✓ Nombre workstation: " + rawName);
-                        return rawName;
-                    }
-                    if (candidateName == null && !rawName.startsWith("__")
-                            && !rawName.equals("*")) {
-                        candidateName = rawName;
-                    }
-                }
+            for (int i = 0; i < qdCount; i++) {
+                pos = skipEncodedName(data, pos, length);
+                if (pos < 0 || pos + 4 > length) return null;
+                pos += 4;
             }
 
-            return candidateName;
+            String fallback = null;
+            for (int answer = 0; answer < anCount && pos < length; answer++) {
+                pos = skipEncodedName(data, pos, length);
+                if (pos < 0 || pos + 10 > length) return fallback;
 
+                int type = readU16(data, pos);
+                int rdLength = readU16(data, pos + 8);
+                int rdata = pos + 10;
+                if (rdata + rdLength > length) return fallback;
+
+                if (type == 0x0021 && rdLength >= 1) {
+                    int numNames = data[rdata] & 0xFF;
+                    int namesStart = rdata + 1;
+                    if (namesStart + numNames * 18 > rdata + rdLength) return fallback;
+
+                    for (int i = 0; i < numNames; i++) {
+                        int nameStart = namesStart + i * 18;
+                        String rawName = new String(data, nameStart, 15,
+                                java.nio.charset.StandardCharsets.US_ASCII).trim();
+                        int typeSuffix = data[nameStart + 15] & 0xFF;
+                        int flags = ((data[nameStart + 16] & 0xFF) << 8)
+                                | (data[nameStart + 17] & 0xFF);
+
+                        boolean isUnique = (flags & 0x8000) == 0;
+                        boolean isActive = (flags & 0x0400) != 0 || flags == 0;
+                        if (!isUnique || !isActive || rawName.isEmpty()
+                                || rawName.equals("*") || rawName.startsWith("__")) {
+                            continue;
+                        }
+
+                        // 0x00 = workstation: normalmente el nombre humano más útil.
+                        if (typeSuffix == 0x00) return rawName;
+                        // 0x20 = file server; conservar como fallback.
+                        if (fallback == null && typeSuffix == 0x20) fallback = rawName;
+                        if (fallback == null) fallback = rawName;
+                    }
+                }
+
+                pos = rdata + rdLength;
+            }
+            return fallback;
         } catch (Exception e) {
             Log.v(TAG, "Error parseando respuesta NBSTAT: " + e.getMessage());
             return null;
         }
+    }
+
+    private static int readU16(byte[] data, int pos) {
+        return ((data[pos] & 0xFF) << 8) | (data[pos + 1] & 0xFF);
+    }
+
+    private static int skipEncodedName(byte[] data, int pos, int length) {
+        if (pos >= length) return -1;
+        int first = data[pos] & 0xFF;
+        if ((first & 0xC0) == 0xC0) {
+            return pos + 2 <= length ? pos + 2 : -1;
+        }
+        while (pos < length) {
+            int labelLength = data[pos++] & 0xFF;
+            if (labelLength == 0) return pos;
+            if ((labelLength & 0xC0) == 0xC0) {
+                return pos < length ? pos + 1 : -1;
+            }
+            if (pos + labelLength > length) return -1;
+            pos += labelLength;
+        }
+        return -1;
     }
 }

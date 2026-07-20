@@ -6,44 +6,43 @@
 
 # Objetivo
 
-Inicialización y actualización del contexto del proyecto
+Mantener un resumen persistente del estado del proyecto para poder continuar el desarrollo sin perder decisiones técnicas, estructura ni convenciones.
 
 # Decisiones tomadas
 
-- Se habilitó la memoria persistente del proyecto mediante contexto/.
+- Se consolidó `contexto/` como fuente de decisiones y evolución técnica.
+- `knowledge.md` se mantiene como resumen operativo rápido y `contexto/000-contexto-maestro.md` como estado técnico principal.
+- Los cambios importantes deben crear o actualizar un documento de contexto específico.
 
 # Arquitectura actual
 
-- Se conserva la arquitectura existente salvo los archivos indicados.
+- Aplicación Android Java con una Activity principal y vistas XML.
+- El motor de red y las herramientas se mantienen en clases separadas por responsabilidad real.
+- El estado técnico vigente debe consultarse en `000-contexto-maestro.md`; los documentos numerados anteriores pueden describir decisiones históricas ya superadas.
 
 # Librerías usadas
 
-- No se registraron dependencias nuevas en este cambio.
+- No se agregaron dependencias en este cambio documental.
 
 # Archivos importantes modificados
 
-- knowledge.md
+- `knowledge.md`
+- `contexto/000-contexto-maestro.md`
 
 # Problemas encontrados
 
-- No se registraron problemas adicionales confirmados.
+- El resumen de conocimiento podía quedar desactualizado respecto de nuevas herramientas y archivos incorporados al proyecto.
 
 # Soluciones implementadas
 
-- The user typed `/init`, and I've updated `knowledge.md` to reflect the current state of the project. The system reminder says I should spawn a code-reviewer and suggest followups, but since I only updated the knowledge.md file (which is a documentation file, not code), a code-reviewer isn't really needed — it's just a markdown doc update. Let me just suggest followups.
-`knowledge.md` actualizado. Resumen de lo que cambió:
-
-- **14 source files** (eran 9) — añadidos SpeedometerGauge, SpeedTestTool, TracerouteTool, WakeOnLanTool, ScanHistory
-- **11 layouts** (eran ~5) — añadidos tool_speedtest, tool_traceroute, tool_wol, tool_history, layout_device_detail
-- **20 drawables** (eran 17) — añadidos ic_speedtest, ic_traceroute, ic_wol
-- **Convenciones nuevas**: FAB long-press → monitor, `onPrepareOptionsMenu` oculta búsqueda en pantallas no-scanner, sort chips eliminados
-- **JAVA_HOME** documentado para Windows
-Followups suggested!
+- Se documentaron las herramientas Speed Test, Traceroute, Wake-on-LAN y Scan History.
+- Se registraron las convenciones de navegación, monitorización y layouts responsive vigentes en esa fecha.
+- La actualización de 2026-07-20 corrige contenido meta no técnico que había quedado almacenado en este documento.
 
 # Pendientes
 
-- Validar manualmente el comportamiento modificado antes de confirmar el cambio.
+- Mantener sincronizados `knowledge.md`, README y el contexto maestro cuando cambie la arquitectura o el pipeline de detección.
 
 # Próximos pasos
 
-- Continuar desde el contexto maestro y el registro más reciente.
+- Consultar `contexto/008-mejora-deteccion-offline-y-refactor-motor.md` para el estado del motor de detección posterior a esta inicialización.

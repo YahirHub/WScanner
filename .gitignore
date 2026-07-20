@@ -9,6 +9,5 @@
 .cxx
 local.properties
 
-# Codewolf
 .agents/
 sesion.jsonl

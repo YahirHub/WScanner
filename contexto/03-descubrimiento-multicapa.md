@@ -1,5 +1,6 @@
 # Fecha
 2026-07-13
+> Estado del documento: histórico. Para el pipeline vigente desde 2026-07-20 consultar `008-mejora-deteccion-offline-y-refactor-motor.md`.
 
 # Objetivo
 Implementar motor de descubrimiento multicapa (mDNS + SSDP + NetBIOS + HTTP fingerprinting)
@@ -57,7 +58,7 @@ Fase 4:      Construir dispositivos con buildDeviceName() multicapa
 
 ## Decisiones técnicas
 
-- **MulticastSocket crudo** (no NsdManager): NsdManager en API 34+ (targetSdk 36) requiere ACCESS_LOCAL_NETWORK o diálogo de picker. MulticastSocket funciona en API 24→36 sin permisos adicionales.
+- **MulticastSocket crudo** (no NsdManager): la implementación actual mantiene control directo del protocolo y compatibilidad con API 24→36. El permiso `ACCESS_LOCAL_NETWORK` debe revisarse al migrar el target a API 37 o superior; no se documenta como requisito actual del target 36.
 - **Un solo MulticastLock compartido**: adquirido al inicio del scan, liberado al final. Evita locks redundantes.
 - **Sin dependencias externas**: todo usa `java.net.MulticastSocket`, `DatagramSocket`, `DatagramPacket`, `URL`, `HttpURLConnection`.
 - **Permiso `CHANGE_WIFI_MULTICAST_STATE`**: normal (no requiere diálogo de usuario).

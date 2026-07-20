@@ -172,6 +172,7 @@ public class MainActivity extends AppCompatActivity
             HapticUtil.performConfirm(btnScan);
             if (isScanning) {
                 if (activeScanMode) stopActiveScan();
+                networkScanner.cancel();
                 setScanning(false);
             } else {
                 startScan();
@@ -384,26 +385,11 @@ public class MainActivity extends AppCompatActivity
 
                     if (existingIdx != null) {
                         Device existing = devices.get(existingIdx);
+                        device.online = true;
+                        device.lastSeen = System.currentTimeMillis();
+                        DeviceIdentity.mergeInto(existing, device);
                         existing.online = true;
                         existing.lastSeen = System.currentTimeMillis();
-
-                        if (!device.openPorts.isEmpty()) {
-                            existing.openPorts = device.openPorts;
-                            existing.serviceNames = device.serviceNames;
-                        }
-                        if (device.mac != null && !device.mac.equals("N/A")
-                                && (existing.mac == null || existing.mac.equals("N/A"))) {
-                            existing.mac = device.mac;
-                            existing.vendor = device.vendor;
-                        }
-
-                        if (isBetterSource(device.discoveryMethod, existing.discoveryMethod)) {
-                            existing.name = device.name;
-                            existing.vendor = device.vendor;
-                            existing.mac = device.mac;
-                            existing.discoveryMethod = device.discoveryMethod;
-                            existing.discoveryDetail = device.discoveryDetail;
-                        }
 
                         adapter.notifyItemChanged(existingIdx);
                     } else {
@@ -460,23 +446,6 @@ public class MainActivity extends AppCompatActivity
         });
     }
 
-    private boolean isBetterSource(String src1, String src2) {
-        return sourceRank(src1) > sourceRank(src2);
-    }
-
-    private int sourceRank(String source) {
-        if (source == null) return 0;
-        switch (source) {
-            case "mDNS":     return 7;
-            case "SSDP":     return 6;
-            case "NetBIOS":  return 5;
-            case "OUI DB":   return 4;
-            case "DNS":      return 3;
-            case "HTTP":     return 2;
-            default:         return 1;
-        }
-    }
-
     // ── Active Scan Mode ─────────────────────────────────────────
 
     private void toggleActiveScan() {
@@ -493,7 +462,7 @@ public class MainActivity extends AppCompatActivity
     private void stopActiveScan() {
         activeScanMode = false;
         activeScanCycle = 0;
-        activeScanHandler.removeCallbacks(null);
+        activeScanHandler.removeCallbacksAndMessages(null);
         for (Device d : devices) {
             d.online = true;
         }

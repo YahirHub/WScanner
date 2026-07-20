@@ -26,6 +26,7 @@ android {
 }
 
 dependencies {
+    testImplementation(libs.junit)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
     implementation("androidx.recyclerview:recyclerview:1.4.0")
