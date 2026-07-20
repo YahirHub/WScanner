@@ -33,3 +33,7 @@ Cargado con org.json nativo de Android, sin dependencias externas.
 ## Estado actual 2026-07-20
 
 La base OUI se conserva como enriquecimiento local opcional. El motor de detección actual no depende de MAC/OUI para descubrir ni clasificar dispositivos, ya que Android moderno puede no exponer la tabla de vecinos a aplicaciones normales. El pipeline vigente está documentado en `008-mejora-deteccion-offline-y-refactor-motor.md`.
+
+## Estado actual 2026-07-20 — actualización posterior
+
+El pipeline descrito originalmente en este archivo es histórico. La arquitectura vigente incluye monitor por ciclo, mDNS estructurado, SSDP estructurado, WS-Discovery/ONVIF, SNMP best-effort, TLS y binding a la red Android seleccionada. Consultar `009-monitor-continuo-y-descubrimiento-avanzado-offline.md` y `000-contexto-maestro.md`.

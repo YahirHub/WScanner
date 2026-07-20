@@ -14,6 +14,10 @@ public class Device {
     public int ttl = -1;            // TTL del ping (-1 = no disponible, requiere raw sockets)
     public List<Integer> openPorts = new ArrayList<>();
     public List<String> serviceNames = new ArrayList<>();
+    public String deviceType = null;    // tipo inferido por señales/protocolos locales
+    public String manufacturer = null;  // metadato autoanunciado por el dispositivo
+    public String model = null;         // metadato autoanunciado por el dispositivo
+    public String osHint = null;        // pista declarada por banners/protocolos, no fingerprint remoto
     public boolean online = true;       // false = visto antes, ya no responde
     public String userLabel = null;     // etiqueta personalizada del usuario
     public long lastSeen = 0;           // System.currentTimeMillis() del último descubrimiento

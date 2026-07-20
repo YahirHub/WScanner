@@ -33,4 +33,11 @@ public class NetworkRangeTest {
         assertEquals("10.20.30.1", hosts.get(0));
         assertEquals("10.20.30.254", hosts.get(253));
     }
+    @Test
+    public void cidrUsesActualNetworkAddress() {
+        NetworkScanner.NetworkRange range = new NetworkScanner.NetworkRange(
+                "192.168.10.218", 24, "192.168.10.1");
+        assertEquals("192.168.10.0/24", range.cidr());
+    }
+
 }

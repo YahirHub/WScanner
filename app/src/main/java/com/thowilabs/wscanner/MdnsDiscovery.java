@@ -12,6 +12,8 @@ import java.net.NetworkInterface;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -42,7 +44,20 @@ public class MdnsDiscovery {
      * @return Map IP → nombre .local
      */
     public static Map<String, String> discoverServiceDiscovery(InetAddress localAddr) {
-        Map<String, String> results = new HashMap<>();
+        Map<String, String> names = new HashMap<>();
+        for (Map.Entry<String, Result> entry : discoverServiceDiscoveryDetailed(localAddr).entrySet()) {
+            names.put(entry.getKey(), entry.getValue().displayName());
+        }
+        return names;
+    }
+
+    /**
+     * Variante estructurada que conserva los tipos de servicio anunciados por cada
+     * host. Esto permite clasificar Cast, AirPlay, impresión, SMB, HomeKit, Matter,
+     * Android TV, MQTT y otros sin tablas de fabricantes.
+     */
+    public static Map<String, Result> discoverServiceDiscoveryDetailed(InetAddress localAddr) {
+        Map<String, Result> results = new HashMap<>();
         MulticastSocket socket = null;
         long t0 = System.currentTimeMillis();
 
@@ -58,9 +73,10 @@ public class MdnsDiscovery {
             Set<String> discoveredTypes = new HashSet<>();
             Map<String, SrvEntry> srvEntries = new HashMap<>();
             Map<String, String> ipToHost = new HashMap<>();
+            Map<String, Map<String, String>> txtEntries = new HashMap<>();
 
             sendQuery(socket, buildDnsQuery("_services._dns-sd._udp.local", (short) 12));
-            collectDiscoveryResponses(socket, 1200, discoveredTypes, srvEntries, ipToHost);
+            collectDiscoveryResponses(socket, 1200, discoveredTypes, srvEntries, ipToHost, txtEntries);
 
             Set<String> serviceTypes = new HashSet<>();
             for (String serviceType : discoveredTypes) {
@@ -88,7 +104,19 @@ public class MdnsDiscovery {
                     "_companion-link._tcp.local",
                     "_adb-tls-connect._tcp.local",
                     "_adb-tls-pairing._tcp.local",
-                    "_androidtvremote2._tcp.local"
+                    "_androidtvremote2._tcp.local",
+                    "_rtsp._tcp.local",
+                    "_mqtt._tcp.local",
+                    "_mqtts._tcp.local",
+                    "_nfs._tcp.local",
+                    "_ftp._tcp.local",
+                    "_sftp-ssh._tcp.local",
+                    "_telnet._tcp.local",
+                    "_rfb._tcp.local",
+                    "_daap._tcp.local",
+                    "_matter._tcp.local",
+                    "_matterc._udp.local",
+                    "_meshcop._udp.local"
             };
             Collections.addAll(serviceTypes, wellKnownServices);
             Log.d(TAG, "Tipos mDNS a consultar: " + serviceTypes.size());
@@ -105,7 +133,7 @@ public class MdnsDiscovery {
             }
 
             Set<String> ptrNames = new HashSet<>();
-            collectDiscoveryResponses(socket, 1800, ptrNames, srvEntries, ipToHost);
+            collectDiscoveryResponses(socket, 1800, ptrNames, srvEntries, ipToHost, txtEntries);
 
             Set<String> instances = new HashSet<>();
             for (String ptrName : ptrNames) {
@@ -119,20 +147,21 @@ public class MdnsDiscovery {
             for (String instance : instances) {
                 try {
                     sendQuery(socket, buildDnsQuery(normalizeSrvQueryName(instance, ""), (short) 33));
+                    sendQuery(socket, buildDnsQuery(normalizeSrvQueryName(instance, ""), (short) 16));
                 } catch (IOException e) {
-                    Log.v(TAG, "No se pudo resolver SRV de " + instance + ": " + e.getMessage());
+                    Log.v(TAG, "No se pudo resolver SRV/TXT de " + instance + ": " + e.getMessage());
                 }
             }
-            collectDiscoveryResponses(socket, 1800, null, srvEntries, ipToHost);
+            collectDiscoveryResponses(socket, 1800, null, srvEntries, ipToHost, txtEntries);
 
-            Map<String, String> hostToInstance = buildHostToInstance(srvEntries);
-            mergeResolvedHosts(results, ipToHost, hostToInstance);
+            Map<String, Set<String>> hostToInstances = buildHostToInstances(srvEntries);
+            mergeResolvedHostsDetailed(results, ipToHost, hostToInstances, srvEntries, txtEntries);
 
             // 4) Pedir A únicamente para targets SRV todavía no resueltos. También se
             // hace en lote para mantener el tiempo total acotado.
             Set<String> resolvedHosts = new HashSet<>();
             for (String host : ipToHost.values()) resolvedHosts.add(cleanDotLocal(host));
-            for (String host : hostToInstance.keySet()) {
+            for (String host : hostToInstances.keySet()) {
                 if (resolvedHosts.contains(host)) continue;
                 try {
                     sendQuery(socket, buildDnsQuery(host + ".local", (short) 1));
@@ -140,8 +169,8 @@ public class MdnsDiscovery {
                     Log.v(TAG, "No se pudo resolver A de " + host + ": " + e.getMessage());
                 }
             }
-            collectDiscoveryResponses(socket, 1500, null, srvEntries, ipToHost);
-            mergeResolvedHosts(results, ipToHost, buildHostToInstance(srvEntries));
+            collectDiscoveryResponses(socket, 1500, null, srvEntries, ipToHost, txtEntries);
+            mergeResolvedHostsDetailed(results, ipToHost, buildHostToInstances(srvEntries), srvEntries, txtEntries);
 
             leaveGroup(socket, localAddr);
 
@@ -261,7 +290,8 @@ public class MdnsDiscovery {
     private static void collectDiscoveryResponses(MulticastSocket socket, int timeoutMs,
                                                   Set<String> ptrNames,
                                                   Map<String, SrvEntry> srvEntries,
-                                                  Map<String, String> ipToHost) {
+                                                  Map<String, String> ipToHost,
+                                                  Map<String, Map<String, String>> txtEntries) {
         long deadline = System.currentTimeMillis() + timeoutMs;
         while (System.currentTimeMillis() < deadline) {
             int remaining = (int) (deadline - System.currentTimeMillis());
@@ -272,32 +302,128 @@ public class MdnsDiscovery {
             if (ptrNames != null) extractPtrNames(response, ptrNames);
             if (srvEntries != null) srvEntries.putAll(parseSrvResponse(response));
             if (ipToHost != null) ipToHost.putAll(parseDnsResponse(response));
+            if (txtEntries != null) mergeTxtEntries(txtEntries, parseTxtResponse(response));
         }
     }
 
-    private static Map<String, String> buildHostToInstance(Map<String, SrvEntry> srvEntries) {
-        Map<String, String> hostToInstance = new HashMap<>();
+    private static Map<String, Set<String>> buildHostToInstances(Map<String, SrvEntry> srvEntries) {
+        Map<String, Set<String>> hostToInstances = new HashMap<>();
         for (Map.Entry<String, SrvEntry> entry : srvEntries.entrySet()) {
             String host = cleanDotLocal(entry.getValue().target);
-            String instance = cleanServiceInstanceName(entry.getKey());
+            String instance = cleanDotLocal(entry.getKey());
             if (!host.isEmpty() && !instance.isEmpty()) {
-                hostToInstance.put(host, instance);
+                hostToInstances.computeIfAbsent(host, ignored -> new HashSet<>()).add(instance);
             }
         }
-        return hostToInstance;
+        return hostToInstances;
     }
 
-    private static void mergeResolvedHosts(Map<String, String> results,
-                                           Map<String, String> ipToHost,
-                                           Map<String, String> hostToInstance) {
+    private static void mergeResolvedHostsDetailed(Map<String, Result> results,
+                                                   Map<String, String> ipToHost,
+                                                   Map<String, Set<String>> hostToInstances,
+                                                   Map<String, SrvEntry> srvEntries,
+                                                   Map<String, Map<String, String>> txtEntries) {
+        Map<String, Set<String>> hostServices = buildHostServices(srvEntries);
         for (Map.Entry<String, String> entry : ipToHost.entrySet()) {
             String host = cleanDotLocal(entry.getValue());
-            String instance = hostToInstance.get(host);
-            if (instance != null && !instance.isEmpty()) {
-                results.put(entry.getKey(), instance);
-                Log.i(TAG, "  🏷️  mDNS: " + entry.getKey() + " → " + instance);
+            Result result = results.computeIfAbsent(entry.getKey(), ignored -> new Result());
+            result.hostName = host;
+
+            Set<String> instances = hostToInstances.get(host);
+            if (instances != null) {
+                for (String fullInstance : instances) {
+                    String instance = cleanServiceInstanceName(fullInstance);
+                    if (!instance.isEmpty()) result.offerName(instance, 8);
+                    Map<String, String> txt = findTxtForInstance(txtEntries, fullInstance);
+                    applyTxtMetadata(result, txt);
+                }
+            }
+            if (result.name == null && !host.isEmpty()) {
+                result.offerName(host, 4);
+            }
+
+            Set<String> services = hostServices.get(host);
+            if (services != null) {
+                for (String service : services) result.addService(service);
+            }
+            Log.i(TAG, "  🏷️  mDNS: " + entry.getKey() + " → " + result.displayName()
+                    + (result.services.isEmpty() ? "" : " " + result.services));
+        }
+    }
+
+    private static Map<String, String> findTxtForInstance(
+            Map<String, Map<String, String>> txtEntries, String instance) {
+        if (txtEntries == null || txtEntries.isEmpty() || instance == null) return Collections.emptyMap();
+        String wanted = cleanDotLocal(instance).toLowerCase(Locale.ROOT);
+        for (Map.Entry<String, Map<String, String>> entry : txtEntries.entrySet()) {
+            if (cleanDotLocal(entry.getKey()).toLowerCase(Locale.ROOT).equals(wanted)) {
+                return entry.getValue();
             }
         }
+        return Collections.emptyMap();
+    }
+
+    static void applyTxtMetadata(Result result, Map<String, String> txt) {
+        if (result == null || txt == null || txt.isEmpty()) return;
+
+        String friendly = firstUseful(txt, "fn", "name", "displayname", "nickname");
+        if (friendly != null) result.offerName(friendly, 10);
+
+        if (result.manufacturer == null) {
+            result.manufacturer = firstUseful(txt, "manufacturer", "mfg", "mf");
+        }
+        if (result.model == null) {
+            result.model = firstUseful(txt, "model", "md", "ty", "product", "am");
+        }
+        if (result.osHint == null) {
+            result.osHint = firstUseful(txt, "os", "osvers", "platform");
+        }
+        if (result.mac == null) {
+            String possibleMac = firstUseful(txt, "deviceid", "mac", "macaddress");
+            if (isMac(possibleMac)) result.mac = normalizeMac(possibleMac);
+        }
+
+        for (Map.Entry<String, String> entry : txt.entrySet()) {
+            result.addTxt(entry.getKey(), entry.getValue());
+        }
+    }
+
+    private static String firstUseful(Map<String, String> values, String... keys) {
+        for (String key : keys) {
+            String value = values.get(key);
+            if (value == null) continue;
+            String cleaned = cleanTxtValue(value);
+            if (cleaned != null) return cleaned;
+        }
+        return null;
+    }
+
+    private static boolean isMac(String value) {
+        if (value == null) return false;
+        return value.trim().matches("(?i)(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2}");
+    }
+
+    private static String normalizeMac(String value) {
+        return value.trim().replace('-', ':').toUpperCase(Locale.ROOT);
+    }
+
+    private static Map<String, Set<String>> buildHostServices(Map<String, SrvEntry> srvEntries) {
+        Map<String, Set<String>> result = new HashMap<>();
+        for (Map.Entry<String, SrvEntry> entry : srvEntries.entrySet()) {
+            String host = cleanDotLocal(entry.getValue().target);
+            String service = extractServiceTypeFromInstance(entry.getKey());
+            if (host.isEmpty() || service.isEmpty()) continue;
+            result.computeIfAbsent(host, ignored -> new HashSet<>()).add(service);
+        }
+        return result;
+    }
+
+    static String extractServiceTypeFromInstance(String instance) {
+        String clean = cleanDotLocal(instance);
+        int marker = clean.indexOf("._");
+        if (marker < 0 || marker + 1 >= clean.length()) return "";
+        String service = clean.substring(marker + 1);
+        return isServiceType(service) ? service : "";
     }
 
     static String normalizeServiceType(String serviceType) {
@@ -580,6 +706,91 @@ public class MdnsDiscovery {
         return results;
     }
 
+    /**
+     * Extrae registros TXT DNS-SD. Los valores son autoanunciados por el propio
+     * dispositivo y se usan solo como metadatos; no existe una tabla de marcas.
+     */
+    static Map<String, Map<String, String>> parseTxtResponse(byte[] data) {
+        Map<String, Map<String, String>> results = new HashMap<>();
+        if (data == null || data.length < 12) return results;
+
+        try {
+            int flags = ((data[2] & 0xFF) << 8) | (data[3] & 0xFF);
+            if ((flags & 0x8000) == 0) return results;
+
+            int qdcount = ((data[4] & 0xFF) << 8) | (data[5] & 0xFF);
+            int ancount = ((data[6] & 0xFF) << 8) | (data[7] & 0xFF);
+            int nscount = ((data[8] & 0xFF) << 8) | (data[9] & 0xFF);
+            int arcount = ((data[10] & 0xFF) << 8) | (data[11] & 0xFF);
+
+            int pos = 12;
+            for (int i = 0; i < qdcount && pos < data.length; i++) {
+                Object[] r = skipName(data, pos);
+                pos = ((Integer) r[0]).intValue();
+                if (pos + 4 > data.length) return results;
+                pos += 4;
+            }
+
+            int total = ancount + nscount + arcount;
+            for (int i = 0; i < total && pos + 10 <= data.length; i++) {
+                Object[] nameResult = readName(data, pos);
+                String recordName = (String) nameResult[1];
+                pos = ((Integer) nameResult[0]).intValue();
+                if (pos + 10 > data.length) break;
+
+                int rtype = ((data[pos] & 0xFF) << 8) | (data[pos + 1] & 0xFF);
+                int rdlength = ((data[pos + 8] & 0xFF) << 8) | (data[pos + 9] & 0xFF);
+                int rdataStart = pos + 10;
+                int rdataEnd = rdataStart + rdlength;
+                if (rdataEnd > data.length) break;
+
+                if (rtype == 16) {
+                    Map<String, String> values = results.computeIfAbsent(
+                            cleanDotLocal(recordName), ignored -> new LinkedHashMap<>());
+                    int cursor = rdataStart;
+                    while (cursor < rdataEnd) {
+                        int txtLength = data[cursor++] & 0xFF;
+                        if (txtLength == 0) continue;
+                        if (cursor + txtLength > rdataEnd) break;
+                        String raw = new String(data, cursor, txtLength,
+                                java.nio.charset.StandardCharsets.UTF_8).trim();
+                        cursor += txtLength;
+                        if (raw.isEmpty()) continue;
+
+                        int eq = raw.indexOf('=');
+                        String key = (eq >= 0 ? raw.substring(0, eq) : raw)
+                                .trim().toLowerCase(Locale.ROOT);
+                        String value = eq >= 0 ? raw.substring(eq + 1).trim() : "true";
+                        if (!key.isEmpty() && key.length() <= 64) {
+                            String cleanedValue = cleanTxtValue(value);
+                            if (cleanedValue != null) values.put(key, cleanedValue);
+                        }
+                    }
+                }
+                pos = rdataEnd;
+            }
+        } catch (Exception e) {
+            Log.v(TAG, "Error en parseTxt: " + e.getMessage());
+        }
+        return results;
+    }
+
+    private static void mergeTxtEntries(Map<String, Map<String, String>> target,
+                                        Map<String, Map<String, String>> source) {
+        for (Map.Entry<String, Map<String, String>> entry : source.entrySet()) {
+            Map<String, String> current = target.computeIfAbsent(
+                    entry.getKey(), ignored -> new LinkedHashMap<>());
+            current.putAll(entry.getValue());
+        }
+    }
+
+    private static String cleanTxtValue(String value) {
+        if (value == null) return null;
+        String cleaned = value.replace('\u0000', ' ').trim().replaceAll("\\s+", " ");
+        if (cleaned.isEmpty() || cleaned.equalsIgnoreCase("unknown")) return null;
+        return cleaned.length() > 160 ? cleaned.substring(0, 160) : cleaned;
+    }
+
     // ═══════════════════════ DNS Name Helpers ═══════════════════════
 
     static Object[] readName(byte[] data, int pos) {
@@ -683,6 +894,64 @@ public class MdnsDiscovery {
     }
 
     // ═══════════════════════ Data classes ═════════════════════════
+
+    public static final class Result {
+        public String name;
+        public String hostName;
+        public String manufacturer;
+        public String model;
+        public String osHint;
+        public String mac;
+        public final java.util.List<String> services = new java.util.ArrayList<>();
+        public final Map<String, String> txt = new LinkedHashMap<>();
+        private int nameScore;
+
+        void offerName(String candidate, int score) {
+            if (candidate == null) return;
+            String clean = candidate.trim();
+            if (clean.isEmpty() || score <= nameScore) return;
+            name = clean;
+            nameScore = score;
+        }
+
+        void addService(String service) {
+            if (service == null || service.trim().isEmpty() || services.contains(service)) return;
+            services.add(service);
+        }
+
+        void addTxt(String key, String value) {
+            if (key == null || value == null || txt.size() >= 24) return;
+            txt.put(key, value);
+        }
+
+        public String displayName() {
+            if (name != null && !name.trim().isEmpty()) return name;
+            if (hostName != null && !hostName.trim().isEmpty()) return hostName;
+            return "Dispositivo mDNS";
+        }
+
+        public String detail() {
+            StringBuilder detail = new StringBuilder();
+            if (hostName != null && !hostName.trim().isEmpty()) detail.append(hostName).append(".local");
+            if (!services.isEmpty()) {
+                if (detail.length() > 0) detail.append(" · ");
+                detail.append("Servicios: ").append(String.join(", ", services));
+            }
+            if (manufacturer != null && !manufacturer.trim().isEmpty()) {
+                if (detail.length() > 0) detail.append(" · ");
+                detail.append("Fabricante anunciado: ").append(manufacturer);
+            }
+            if (model != null && !model.trim().isEmpty()) {
+                if (detail.length() > 0) detail.append(" · ");
+                detail.append("Modelo anunciado: ").append(model);
+            }
+            if (osHint != null && !osHint.trim().isEmpty()) {
+                if (detail.length() > 0) detail.append(" · ");
+                detail.append("Plataforma anunciada: ").append(osHint);
+            }
+            return detail.length() == 0 ? null : detail.toString();
+        }
+    }
 
     static class SrvEntry {
         final String target;

@@ -1,112 +1,96 @@
 # WScanner — Project knowledge
 
-## What this is
+## Current purpose
 
-Android local-network scanner and diagnostics app. Device discovery is local: ICMP/TCP presence checks, mDNS/DNS-SD, SSDP/UPnP, reverse DNS, NetBIOS, port signals and local HTTP metadata. Detection does not require Internet APIs or vendor dictionaries. The embedded OUI database is optional enrichment only when a MAC is actually available.
+Android local-network discovery and diagnostics app. Device discovery is local/offline: no cloud API is required for presence or identity. The engine combines protocol evidence and self-advertised metadata rather than assuming that MAC/OUI will be available on modern Android.
 
-Independent tools include Speed Test, Traceroute, Wake-on-LAN and Scan History. Speed Test can require Internet access; the device discovery engine does not.
+Independent diagnostics such as Speed Test may use Internet access.
 
-## Key directories
+## Current production sources (18 Java classes)
 
-| Path | Purpose |
-|------|---------|
-| `app/src/main/java/com/thowilabs/wscanner/` | Production Java source (15 active classes) |
-| `app/src/test/java/com/thowilabs/wscanner/` | Unit tests for discovery logic |
-| `app/src/main/res/layout/` | Phone layouts |
-| `app/src/main/res/layout-sw600dp/` | Tablet 7-inch alternatives |
-| `app/src/main/res/layout-w840dp/` | Large tablet / landscape alternatives |
-| `app/src/main/res/anim/` | Animation resources |
-| `app/src/main/res/values/` | Colors, strings, themes and dimensions |
-| `app/src/main/res/drawable/` | Vector icons and backgrounds |
-| `app/src/main/assets/oui_database.json` | Optional legacy OUI enrichment; not required for discovery |
-| `contexto/` | Persistent technical context and decisions |
+Core discovery/inventory:
 
-## Source files (15 active)
+- `MainActivity.java`: UI, persistent inventory by subnet, manual rescan and continuous monitor lifecycle.
+- `NetworkScanner.java`: selected-LAN detection, discovery orchestration, cancellation, ports and local fingerprints.
+- `ScanCycleState.java`: records IPs seen during one complete cycle; absence is applied only at cycle end.
+- `DeviceIdentity.java`: single merge/ranking/type-classification policy.
+- `MdnsDiscovery.java`: raw mDNS/DNS-SD discovery, service types, TXT self-advertised metadata and reverse lookup.
+- `SsdpDiscovery.java`: SSDP/UPnP discovery plus structured local XML metadata.
+- `WsDiscovery.java`: WS-Discovery and ONVIF-oriented probes.
+- `SnmpDiscovery.java`: optional SNMP v2c `public` read of `sysName.0`/`sysDescr.0`.
+- `NetBiosDiscovery.java`: NBSTAT/NetBIOS names plus workgroup and Unit ID/MAC when published.
+- `Device.java`, `DeviceAdapter.java`: device model and presentation.
+- `VendorResolver.java`: optional embedded OUI enrichment only when a MAC exists.
 
-| File | Role |
-|------|------|
-| `MainActivity.java` | UI, navigation, scan lifecycle, stop/cancel handling and tools |
-| `NetworkScanner.java` | Discovery orchestrator, real subnet range, candidate collection, ports and cancellation |
-| `DeviceIdentity.java` | Central identity ranking, merge rules and signal-based device classification |
-| `MdnsDiscovery.java` | mDNS/DNS-SD service discovery and reverse lookup |
-| `SsdpDiscovery.java` | SSDP/UPnP discovery and safe local description parsing |
-| `NetBiosDiscovery.java` | Concurrent NBSTAT/NetBIOS discovery |
-| `VendorResolver.java` | Optional OUI lookup when a valid MAC is available |
-| `Device.java` | Device model |
-| `DeviceAdapter.java` | RecyclerView adapter and filtering |
-| `HapticUtil.java` | Cross-API haptic feedback |
-| `SpeedometerGauge.java` | Speed test gauge custom view |
-| `SpeedTestTool.java` | External connectivity speed test |
-| `TracerouteTool.java` | UDP traceroute |
-| `WakeOnLanTool.java` | Wake-on-LAN sender |
-| `ScanHistory.java` | Persistent scan history |
+Other app tools:
 
-## Build & run
+- `HapticUtil.java`, `SpeedometerGauge.java`, `SpeedTestTool.java`, `TracerouteTool.java`, `WakeOnLanTool.java`, `ScanHistory.java`.
+
+## Discovery pipeline
+
+1. Select active WiFi/Ethernet `Network`; read IPv4/prefix/gateway from `LinkProperties`.
+2. Enumerate the actual subnet, bounded to the phone's local `/24` when usable hosts exceed 1024.
+3. Keep local IP and gateway as known candidates.
+4. Presence sweep: best-effort ICMP plus TCP fallback; sockets are bound to the selected Android `Network` when available.
+5. Run mDNS/DNS-SD, SSDP/UPnP, WS-Discovery and SNMP concurrently.
+6. Multicast/protocol responses independently add candidates even when ICMP fails.
+7. mDNS reverse lookup.
+8. ARP/neighbor cache as optional MAC/OUI enrichment.
+9. Concurrent 36-port scan on discovered candidates.
+10. Local metadata: DNS-SD TXT, HTTP title/auth realm, HTTP Server as detail only, TLS certificate SAN/CN, SSH/FTP/RTSP banners.
+11. NetBIOS fallback with optional NBSTAT Unit ID/MAC enrichment.
+12. Merge by IP with `DeviceIdentity`.
+13. At cycle completion only, `ScanCycleState` marks known-but-not-seen devices offline.
+
+## Identity priority
+
+`Local 100 > Gateway 98 > mDNS 90 > WS-Discovery 88 > SSDP 85 > SNMP 82 > NetBIOS 80 > DNS 70 > TLS 65 > HTTP 60 > OUI 50 > TCP 30 > Heuristic 10`
+
+Generic names are penalized. A `Gateway` identity cannot be replaced by an HTTP software banner such as `lighttpd`.
+
+## Continuous monitoring invariants
+
+- Starting a new scan does **not** preemptively mark all devices offline.
+- A device keeps its previous confirmed visual state while the cycle is running.
+- `seenIps` is reset at cycle start.
+- Every discovery callback marks the IP as seen.
+- Only `finishCycle()` changes unseen known devices to offline.
+- A later observation immediately restores online state.
+- Repeated manual scans retain inventory on the same CIDR.
+- A CIDR change clears the inventory to avoid mixing different networks.
+- Stopping monitoring preserves the last completed/verified state.
+- Starting a cycle manually during the monitor delay cancels the pending scheduled callback, preventing overlapping scans.
+
+## Build
 
 ```bash
 ./gradlew :app:testDebugUnitTest
 ./gradlew :app:assembleDebug
 ./gradlew :app:lintDebug
 ./gradlew :app:installDebug
-adb logcat WScanner.mDNS:* WScanner.SSDP:* WScanner.NetBIOS:* WScanner.Scanner:* WScanner.UI:* *:S
 ```
 
-On Windows use `gradlew.bat` with the same tasks.
+Windows uses `gradlew.bat` with the same tasks.
 
-## Tech stack
+## Diagnostic logs
 
-| Layer | Choice |
-|-------|--------|
-| Language | Java 11 |
-| UI | XML Views, Material Components, RecyclerView |
-| Icons | Mikepenz Iconics 5.5 + Community Material Typeface |
-| Network | `java.net` + Android Connectivity APIs |
-| Protocols | ICMP, TCP, mDNS/DNS-SD, SSDP/UPnP, DNS, NetBIOS/NBNS, HTTP, UDP traceroute |
-| Build | Gradle KTS, AGP 9.2.1 |
-| Min SDK | 24 (Android 7.0) |
-| Compile/Target SDK | 36 (Android 16) |
+```bash
+adb logcat WScanner.mDNS:* WScanner.SSDP:* WScanner.WSD:* WScanner.SNMP:* WScanner.NetBIOS:* WScanner.Scanner:* WScanner.UI:* *:S
+```
 
-## Current discovery pipeline
+## Constraints and decisions
 
-1. Read active local IPv4, prefix and gateway from `ConnectivityManager`/`LinkProperties`; fallback to WiFi APIs.
-2. Enumerate the actual subnet, bounded to a local `/24` when the network exceeds 1024 usable hosts.
-3. Presence sweep: `InetAddress.isReachable` plus TCP fallback on representative ports.
-4. mDNS/DNS-SD and SSDP in parallel; multicast responses can add candidates even without ping response.
-5. mDNS reverse lookup for candidates.
-6. ARP/neighbor cache as optional enrichment only.
-7. Concurrent port scan and signal-based classification.
-8. Local HTTP title extraction on known open HTTP ports.
-9. Concurrent NetBIOS on candidates lacking a strong identity.
-10. Merge all updates by IP through `DeviceIdentity`.
+- Java production code, minSdk 24, target/compile SDK 36.
+- No external discovery library and no cloud dependency for device detection.
+- `MulticastLock` is acquired for raw multicast compatibility and released after a scan.
+- SSDP `LOCATION` is fetched only when its URL host is exactly the responder IP and redirects are disabled.
+- HTTP `Server` is software metadata, never a device identity by itself.
+- TLS inspection uses a per-probe capturing `X509TrustManager` that records the presented server chain and delegates normal platform validation; it does not modify global trust configuration or send credentials.
+- SNMP is optional best-effort and uses only the conventional read-only `public` community.
+- `oui_database.json` is legacy optional enrichment; discovery must remain functional without it.
+- RTSP alone is classified conservatively as RTSP/video; explicit ONVIF/camera signals are required to claim camera identity.
+- Before targeting API 37+, implement Android local-network runtime permission behavior.
 
-## Identity source priority
+## Validation status
 
-`Local 100 > mDNS 90 > SSDP 85 > NetBIOS 80 > DNS 70 > HTTP 60 > OUI 50 > TCP 30 > Heuristic 10`
-
-Generic-name penalties prevent a higher-ranked but vague label from overwriting a specific useful identity.
-
-## Key conventions & gotchas
-
-- **Java production code only.**
-- **Single Activity, no Fragments.**
-- **No external network-discovery libraries.** Protocol handling is implemented with local sockets/APIs.
-- **No Internet dependency for device detection.** SSDP XML metadata is fetched only from the same local responder host and redirects are disabled.
-- **MAC/OUI is optional.** Discovery must work with an empty ARP cache.
-- **MulticastLock is required** during mDNS/SSDP scanning.
-- **Progressive discovery:** later sources update the same IP rather than creating duplicate identities.
-- **Cancellation:** `NetworkScanner.cancel()` invalidates the active generation; UI stop calls it.
-- **Large networks:** active scan is bounded to avoid accidental massive sweeps.
-- **Permissions:** INTERNET, ACCESS_NETWORK_STATE, ACCESS_WIFI_STATE, CHANGE_WIFI_MULTICAST_STATE.
-- **Future Android:** re-check local-network permission requirements before targeting API 37+.
-
-## Unit tests added
-
-- `DeviceIdentityTest`: merge quality and signal classification.
-- `MdnsDiscoveryTest`: A-record publication and SRV instance normalization.
-- `NetBiosDiscoveryTest`: valid NBSTAT query wire layout.
-- `NetworkRangeTest`: `/24` host enumeration and large-network bounding.
-
-## Files intentionally absent/removed
-
-- `ArpReader.java`: not part of the current tree; neighbor-cache enrichment lives in `NetworkScanner`.
-- SwipeRefreshLayout flow: scanner is initiated/stopped from the FAB flow.
+Local Java validation with minimal Android stubs compiles the core discovery classes. A lightweight local runner executes 28 Java logic tests successfully. Full Android Gradle build/lint must still be run in an environment with Android SDK and an available Gradle distribution.

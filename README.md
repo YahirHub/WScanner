@@ -1,28 +1,38 @@
 # WScanner
 
-Escáner de red local para Android, sin anuncios ni analíticas. El motor de detección funciona dentro de la red local y no consulta APIs, servicios remotos ni bases de datos en Internet para descubrir dispositivos.
+Escáner e inventario de red local para Android. El descubrimiento de dispositivos funciona dentro de la LAN y no necesita APIs, cuentas, servicios cloud ni consultas a Internet para detectar equipos.
 
 ## Características
 
-- **Descubrimiento multicapa local:** alcance ICMP, comprobación TCP, mDNS/DNS-SD, SSDP/UPnP, DNS inverso, NetBIOS, puertos y metadatos HTTP locales.
-- **Detección de equipos que bloquean ping:** un host puede incorporarse por respuesta TCP, mDNS o SSDP aunque no conteste ICMP.
-- **Subred real:** usa la dirección IPv4 y prefijo reportados por Android en lugar de asumir siempre `/24`.
-- **Identidad por señales observadas:** combina nombres y tipos detectados por protocolos y servicios locales, sin depender de diccionarios de fabricantes.
-- **Resultados progresivos:** los dispositivos aparecen y se enriquecen durante el escaneo.
-- **Fusión estable de identidad:** una señal genérica posterior no reemplaza un nombre específico de mejor calidad.
-- **Cancelación real del escaneo:** detener el escaneo invalida el trabajo activo y evita seguir publicando resultados obsoletos.
-- **Privacidad:** sin anuncios, sin analíticas y sin permisos de ubicación, contactos o almacenamiento.
+- **Inventario persistente por red:** un reescaneo no vacía la lista ni marca equipos como ausentes mientras el ciclo sigue en curso. Un dispositivo pasa a estado atenuado/offline solo cuando termina el barrido completo sin volver a observarlo.
+- **Monitor continuo estable:** la pulsación larga sobre el botón de escaneo repite ciclos conservando el último estado confirmado de cada equipo entre ciclos; un inicio manual durante la pausa cancela el ciclo programado para evitar escaneos solapados.
+- **Descubrimiento multicapa local:** ICMP, fallback TCP, mDNS/DNS-SD, SSDP/UPnP, WS-Discovery/ONVIF, SNMP v2c de mejor esfuerzo, DNS inverso, NetBIOS/NBNS, caché de vecinos, puertos, HTTP, TLS, SSH, FTP y RTSP.
+- **Equipos que bloquean ping:** mDNS, SSDP, WS-Discovery, SNMP o un servicio TCP abierto pueden incorporar un dispositivo aunque no responda ICMP.
+- **Subred real:** usa la IPv4, prefijo y gateway reportados por Android; no asume siempre `/24`.
+- **Sockets ligados a la LAN seleccionada:** cuando Android expone el `Network` WiFi/Ethernet, los probes TCP y las peticiones HTTP locales se fijan a esa red para evitar rutas incorrectas en equipos con varias conexiones.
+- **Identidad por evidencias locales:** combina nombres, tipos, servicios y metadatos autoanunciados por los propios dispositivos sin depender de un diccionario remoto.
+- **mDNS estructurado:** conserva tipos DNS-SD y registros TXT autoanunciados para recuperar, cuando existen, nombre amigable, modelo, fabricante, plataforma y MAC publicada por el propio servicio.
+- **UPnP estructurado:** conserva `friendlyName`, fabricante, modelo, tipo UPnP y `SERVER`; el software del servidor web no se usa como nombre del equipo.
+- **WS-Discovery/ONVIF:** descubre cámaras, impresoras, escáneres y dispositivos WSD mediante UDP 3702.
+- **SNMP opcional:** consulta únicamente `sysName.0` y `sysDescr.0` con la comunidad convencional de lectura `public`; nunca es requisito para detectar un host.
+- **NetBIOS enriquecido:** NBSTAT puede aportar nombre, grupo de trabajo y Unit ID/MAC cuando el equipo lo publica, permitiendo enriquecer el fabricante con la OUI local sin depender de Internet.
+- **Fingerprint local adicional:** títulos/realm HTTP, certificado TLS local y banners SSH/FTP/RTSP como señales complementarias.
+- **Clasificación conservadora:** un puerto RTSP abierto se clasifica como dispositivo RTSP/video; solo señales explícitas como ONVIF o `NetworkVideoTransmitter` elevan la categoría a cámara.
+- **MAC/OUI opcional:** la base OUI embebida solo enriquece resultados cuando Android realmente permite obtener una MAC.
+- **Fusión estable:** una señal genérica posterior no reemplaza una identidad específica de mejor calidad.
+- **Cancelación real:** detener el escaneo invalida la generación activa y evita publicar resultados obsoletos.
+- **Aislamiento entre ciclos:** callbacks tardíos de un escaneo cancelado se descartan y no pueden marcar equipos como vistos dentro del ciclo siguiente.
 
-> La detección de dispositivos es local/offline. Herramientas independientes como la prueba de velocidad sí pueden necesitar acceso a Internet para medir conectividad externa.
+> La detección de dispositivos es local/offline. Herramientas independientes como Speed Test pueden necesitar Internet porque miden conectividad externa.
 
 ## Tecnología
 
 | Capa | Tecnología |
 |---|---|
 | Lenguaje | Java 11 |
-| UI | Material Components, CoordinatorLayout, RecyclerView, Iconics |
-| Red | `java.net` y APIs de conectividad de Android |
-| Protocolos | ICMP, TCP, mDNS/DNS-SD, SSDP/UPnP, DNS, NetBIOS/NBNS, HTTP |
+| UI | Material Components, RecyclerView, XML Views, Iconics |
+| Red | `java.net` + APIs de conectividad de Android |
+| Protocolos | ICMP, TCP, mDNS/DNS-SD, SSDP/UPnP, WS-Discovery/ONVIF, SNMP, DNS, NetBIOS/NBNS, HTTP, TLS, SSH, FTP, RTSP |
 | Build | Gradle KTS, Android Gradle Plugin 9.2.1 |
 | Min SDK | 24 (Android 7.0) |
 | Compile/Target SDK | 36 (Android 16) |
@@ -31,12 +41,14 @@ Escáner de red local para Android, sin anuncios ni analíticas. El motor de det
 
 El manifiesto declara:
 
-- `INTERNET`: necesario para sockets TCP/UDP y HTTP, incluidos destinos de la red local.
-- `ACCESS_NETWORK_STATE`: consulta del estado y propiedades de red.
+- `INTERNET`: sockets TCP/UDP y HTTP, incluidos destinos de la red local.
+- `ACCESS_NETWORK_STATE`: consulta de red activa y propiedades de enlace.
 - `ACCESS_WIFI_STATE`: compatibilidad con información WiFi y fallback de IP/gateway.
-- `CHANGE_WIFI_MULTICAST_STATE`: `MulticastLock` para recibir mDNS/SSDP de forma fiable en WiFi.
+- `CHANGE_WIFI_MULTICAST_STATE`: soporte de recepción multicast en dispositivos/versiones donde Android requiere `MulticastLock` para mDNS.
 
 No solicita ubicación, contactos ni almacenamiento.
+
+Al migrar a `targetSdk 37` (Android 17) debe implementarse el permiso de red local correspondiente antes de publicar esa actualización.
 
 ## Estructura principal
 
@@ -44,45 +56,49 @@ No solicita ubicación, contactos ni almacenamiento.
 WScanner/
 ├── app/
 │   ├── src/main/java/com/thowilabs/wscanner/
-│   │   ├── MainActivity.java          # UI, navegación y ciclo de escaneo
-│   │   ├── NetworkScanner.java        # Orquestador del descubrimiento multicapa
-│   │   ├── DeviceIdentity.java        # Fusión y clasificación por señales observadas
-│   │   ├── MdnsDiscovery.java         # mDNS/DNS-SD manual
-│   │   ├── SsdpDiscovery.java         # SSDP/UPnP y descripción XML local segura
-│   │   ├── NetBiosDiscovery.java      # NBSTAT/NetBIOS concurrente
-│   │   ├── VendorResolver.java        # Enriquecimiento OUI opcional si existe MAC
+│   │   ├── MainActivity.java          # UI, inventario, reescaneo y monitor continuo
+│   │   ├── NetworkScanner.java        # Orquestador de descubrimiento multicapa
+│   │   ├── ScanCycleState.java        # Estado visto/no visto por ciclo completo
+│   │   ├── DeviceIdentity.java        # Fusión, ranking y clasificación de señales
+│   │   ├── MdnsDiscovery.java         # mDNS/DNS-SD estructurado + reverse lookup
+│   │   ├── SsdpDiscovery.java         # SSDP/UPnP + metadatos XML locales
+│   │   ├── WsDiscovery.java           # WS-Discovery/ONVIF
+│   │   ├── SnmpDiscovery.java         # SNMP v2c best-effort
+│   │   ├── NetBiosDiscovery.java      # NBSTAT/NetBIOS
+│   │   ├── VendorResolver.java        # OUI opcional si existe MAC
 │   │   ├── Device.java                # Modelo de dispositivo
-│   │   └── DeviceAdapter.java         # Presentación y filtrado de dispositivos
+│   │   └── DeviceAdapter.java         # Presentación, filtro y estado online/offline
 │   ├── src/main/assets/
-│   │   └── oui_database.json          # Enriquecimiento legado opcional; no requerido
+│   │   └── oui_database.json          # Enriquecimiento opcional; no requerido
 │   └── src/test/java/com/thowilabs/wscanner/
-│       ├── DeviceIdentityTest.java
-│       ├── MdnsDiscoveryTest.java
-│       ├── NetBiosDiscoveryTest.java
-│       └── NetworkRangeTest.java
-├── contexto/                          # Contexto persistente y decisiones técnicas
-├── knowledge.md                       # Resumen operativo del proyecto
+│       └── ...                        # Tests de parsers, identidad, red y monitor
+├── contexto/
+├── knowledge.md
 └── README.md
 ```
 
-## Cómo funciona la detección
+## Pipeline de detección
 
-1. **Detecta la red IPv4 activa** mediante `ConnectivityManager`, `LinkProperties` y `LinkAddress`; conserva un fallback compatible con APIs/ROMs antiguas.
-2. **Construye el rango de hosts** según el prefijo real. Para redes de más de 1024 hosts limita el escaneo activo al `/24` alrededor del teléfono para evitar barridos masivos accidentales.
-3. **Comprueba presencia** con `InetAddress.isReachable()` y, si falla, intenta una lista pequeña de puertos TCP frecuentes.
-4. **Ejecuta mDNS y SSDP en paralelo.** Sus respuestas pueden incorporar dispositivos aunque no hayan respondido al barrido inicial.
-5. **Consulta mDNS inverso** sobre los candidatos locales encontrados.
-6. **Lee la caché ARP/vecinos como enriquecimiento opcional.** La detección no depende de obtener MAC.
-7. **Escanea puertos en paralelo** y clasifica el tipo de equipo mediante protocolos/servicios observados.
-8. **Obtiene títulos HTTP locales** solo sobre puertos HTTP abiertos conocidos.
-9. **Consulta NetBIOS concurrentemente** en candidatos que todavía no tienen una identidad fuerte.
-10. **Fusiona resultados por IP** usando una prioridad de fuentes y evitando degradar nombres específicos.
+1. Detectar la red WiFi/Ethernet activa, IPv4, prefijo, gateway y `Network` de Android.
+2. Generar el rango real. Las redes con más de 1024 hosts utilizables se acotan deliberadamente al `/24` del teléfono.
+3. Publicar IP local y gateway como candidatos conocidos.
+4. Ejecutar presencia concurrente mediante `InetAddress.isReachable()` y fallback TCP en servicios representativos.
+5. Provocar resolución de vecino de mejor esfuerzo para mejorar la caché ARP accesible.
+6. Ejecutar en paralelo mDNS/DNS-SD, SSDP/UPnP, WS-Discovery y SNMP.
+7. Incorporar candidatos descubiertos por esos protocolos aunque no respondan ping.
+8. Ejecutar mDNS inverso sobre candidatos locales.
+9. Leer ARP/neighbor cache únicamente como enriquecimiento de MAC/OUI cuando esté disponible.
+10. Escanear 36 puertos locales en paralelo y clasificar por protocolos observados.
+11. Extraer señales HTTP (`title`, realm de autenticación, `Server` solo como detalle), certificado TLS y banners SSH/FTP/RTSP.
+12. Consultar NBSTAT/NetBIOS sobre candidatos sin una identidad fuerte y recuperar Unit ID/MAC cuando esté disponible.
+13. Fusionar todas las observaciones por IP mediante `DeviceIdentity`.
+14. Al finalizar el ciclo, `ScanCycleState` marca offline únicamente los equipos no vistos durante todo ese ciclo.
 
-### Prioridad de identidad
+### Prioridad base de identidad
 
-`Local > mDNS > SSDP > NetBIOS > DNS > HTTP > OUI opcional > TCP > heurística`
+`Local > Gateway > mDNS > WS-Discovery > SSDP > SNMP > NetBIOS > DNS > TLS > HTTP > OUI opcional > TCP > heurística`
 
-La prioridad no es absoluta: un nombre genérico de una fuente superior no reemplaza automáticamente una identidad específica ya conocida.
+La prioridad no es absoluta: nombres genéricos reciben penalización y no desplazan automáticamente una identidad específica útil.
 
 ## Desarrollo
 
@@ -90,7 +106,7 @@ La prioridad no es absoluta: un nombre genérico de una fuente superior no reemp
 # Tests unitarios
 ./gradlew :app:testDebugUnitTest
 
-# Compilar APK debug
+# APK debug
 ./gradlew :app:assembleDebug
 
 # Lint
@@ -100,23 +116,39 @@ La prioridad no es absoluta: un nombre genérico de una fuente superior no reemp
 ./gradlew :app:installDebug
 ```
 
-En Windows también pueden usarse los mismos objetivos con `gradlew.bat`.
+En Windows:
+
+```powershell
+gradlew.bat :app:testDebugUnitTest
+gradlew.bat :app:assembleDebug
+gradlew.bat :app:lintDebug
+```
 
 ### Logs de diagnóstico
 
 ```bash
-adb logcat WScanner.mDNS:* WScanner.SSDP:* WScanner.NetBIOS:* WScanner.Scanner:* WScanner.UI:* *:S
+adb logcat WScanner.mDNS:* WScanner.SSDP:* WScanner.WSD:* WScanner.SNMP:* WScanner.NetBIOS:* WScanner.Scanner:* WScanner.UI:* *:S
 ```
 
 ## Pruebas recomendadas en dispositivo real
 
-Probar al menos una red con una combinación de router, Android/iOS, Windows/macOS, Smart TV/Chromecast, NAS y/o impresora. Verificar especialmente que:
+Verificar al menos:
 
-- aparezcan equipos que bloquean ICMP pero exponen un servicio TCP;
-- mDNS/SSDP incorporen dispositivos no detectados por ping;
-- los nombres no empeoren cuando llegan varias fuentes para la misma IP;
-- detener el escaneo no siga agregando resultados del trabajo cancelado;
-- la aplicación funcione aunque la caché ARP esté vacía y no haya MAC disponible.
+- iniciar monitor continuo con varios equipos online y confirmar que ninguno se atenúa mientras el siguiente ciclo todavía está en progreso;
+- apagar/desconectar un equipo y confirmar que solo pasa a gris después de terminar un ciclo completo sin detectarlo;
+- reconectarlo y confirmar que vuelve a online al ser observado;
+- ejecutar un reescaneo manual y comprobar que el inventario previo se conserva en la misma subred;
+- cambiar a otra subred y comprobar que el inventario anterior se reinicia para no mezclar redes;
+- probar router, Android/iOS, Windows/macOS/Linux, Smart TV/Chromecast, NAS, impresora y cámara ONVIF/RTSP cuando estén disponibles;
+- comprobar equipos que bloquean ICMP pero exponen servicios locales;
+- comprobar que el gateway no cambia de nombre a software como `lighttpd` por un header HTTP;
+- comprobar que un host con RTSP sin ONVIF no se etiqueta automáticamente como cámara;
+- comprobar equipos con DNS-SD TXT para validar modelo/nombre autoanunciado y equipos Windows/Samba para validar Unit ID/MAC de NBSTAT;
+- validar funcionamiento sin MAC y con caché ARP vacía.
+
+## Límites conocidos
+
+WScanner puede mejorar mucho la **cobertura de descubrimiento** mediante protocolos locales, pero la identificación exacta de marca/modelo/SO depende de la información que el propio equipo expone. Sin una base de fingerprints mantenida a gran escala, no debe inventarse un modelo que no esté autoanunciado. El objetivo del motor offline es priorizar resultados verificables y explicar de dónde salió cada identidad.
 
 ## Licencia
 

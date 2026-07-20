@@ -1,5 +1,6 @@
 package com.thowilabs.wscanner;
 
+import android.net.Network;
 import android.util.Log;
 
 import java.io.BufferedReader;
@@ -10,7 +11,10 @@ import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -19,14 +23,12 @@ import java.util.concurrent.TimeUnit;
 /**
  * Descubrimiento UPnP/SSDP mediante M-SEARCH multicast.
  *
- * Envía M-SEARCH a 239.255.255.250:1900 con ST: ssdp:all,
- * escucha respuestas HTTP/1.1 200 OK durante 4 segundos,
- * y extrae nombres de dispositivo desde headers SERVER y LOCATION.
- *
- * Usa sistema de scoring para elegir el mejor nombre cuando
- * una IP responde con múltiples identidades (ej: TV + Chromecast).
+ * Mantiene todo el trabajo dentro de la LAN. Además del nombre, conserva
+ * metadatos autoanunciados por el propio dispositivo (fabricante, modelo,
+ * tipo UPnP y SERVER) para mejorar la identificación sin depender de una API
+ * ni de un diccionario remoto.
  */
-public class SsdpDiscovery {
+public final class SsdpDiscovery {
 
     private static final String TAG = "WScanner.SSDP";
     private static final String SSDP_ADDR = "239.255.255.250";
@@ -41,15 +43,26 @@ public class SsdpDiscovery {
             "ST: ssdp:all\r\n" +
             "\r\n";
 
-    /**
-     * Descubre dispositivos UPnP en la red local.
-     *
-     * @param localAddr dirección IPv4 de la interfaz local preferida
-     * @return Map IP → nombre amigable
-     */
+    private SsdpDiscovery() {}
+
+    /** Compatibilidad con el API anterior: IP -> nombre. */
     public static Map<String, String> discover(InetAddress localAddr) {
-        Map<String, String> bestNames = new HashMap<>();
-        Map<String, Integer> bestScores = new HashMap<>();
+        Map<String, String> names = new HashMap<>();
+        for (Map.Entry<String, Result> entry : discoverDetailed(localAddr, null).entrySet()) {
+            names.put(entry.getKey(), entry.getValue().displayName());
+        }
+        return names;
+    }
+
+    /**
+     * Descubre dispositivos UPnP y devuelve metadatos estructurados.
+     *
+     * @param localAddr IPv4 local desde la que se debe emitir M-SEARCH.
+     * @param network red Android seleccionada; se usa para fijar las peticiones
+     *                HTTP de LOCATION a la misma WiFi/Ethernet cuando existe.
+     */
+    public static Map<String, Result> discoverDetailed(InetAddress localAddr, Network network) {
+        Map<String, Result> results = new HashMap<>();
         Map<String, String> locations = new HashMap<>();
         long t0 = System.currentTimeMillis();
 
@@ -65,16 +78,17 @@ public class SsdpDiscovery {
                     ? new InetSocketAddress(localAddr, 0)
                     : new InetSocketAddress(0));
 
-            byte[] queryBytes = MSEARCH.getBytes("UTF-8");
+            byte[] queryBytes = MSEARCH.getBytes(java.nio.charset.StandardCharsets.US_ASCII);
             DatagramPacket queryPacket = new DatagramPacket(queryBytes, queryBytes.length,
                     InetAddress.getByName(SSDP_ADDR), SSDP_PORT);
             socket.send(queryPacket);
-            try { Thread.sleep(120); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            try { Thread.sleep(120); } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             socket.send(queryPacket);
-            Log.d(TAG, "M-SEARCH enviado dos veces a " + SSDP_ADDR + ":" + SSDP_PORT);
 
             int responseCount = 0;
-            byte[] buf = new byte[2048];
+            byte[] buf = new byte[4096];
             long deadline = System.currentTimeMillis() + TIMEOUT_MS;
 
             while (System.currentTimeMillis() < deadline) {
@@ -85,56 +99,34 @@ public class SsdpDiscovery {
 
                     DatagramPacket responsePacket = new DatagramPacket(buf, buf.length);
                     socket.receive(responsePacket);
-
                     String response = new String(responsePacket.getData(), 0,
-                            responsePacket.getLength(), "UTF-8");
-                    String remoteIp = responsePacket.getAddress().getHostAddress();
+                            responsePacket.getLength(), java.nio.charset.StandardCharsets.UTF_8);
+                    if (!response.regionMatches(true, 0, "HTTP/1.1 200", 0, 12)) continue;
 
-                    if (response.startsWith("HTTP/1.1 200 OK")) {
-                        responseCount++;
+                    responseCount++;
+                    String ip = responsePacket.getAddress().getHostAddress();
+                    String server = cleanValue(extractHeader(response, "SERVER"), 160);
+                    String location = cleanValue(extractHeader(response, "LOCATION"), 512);
+                    String usn = cleanValue(extractHeader(response, "USN"), 512);
+                    String st = cleanValue(extractHeader(response, "ST"), 256);
 
-                        String server = extractHeader(response, "SERVER");
-                        String location = extractHeader(response, "LOCATION");
-                        String usn = extractHeader(response, "USN");
-
-                        // Evaluar todas las fuentes y elegir la de mayor puntuación
-                        String candidate = null;
-                        int candidateScore = 0;
-
-                        // 1. USN: contiene la info más rica (marca, modelo)
-                        if (usn != null && !usn.isEmpty()) {
-                            UsnResult r = parseUsn(usn);
-                            if (r != null && r.score > candidateScore) {
-                                candidate = r.name;
-                                candidateScore = r.score;
-                            }
-                        }
-
-                        // 2. SERVER header
-                        if (server != null && !server.isEmpty()) {
-                            ServerResult r = parseServer(server);
-                            if (r != null && r.score > candidateScore) {
-                                candidate = r.name;
-                                candidateScore = r.score;
-                            }
-                        }
-
-                        // 3. Guardar LOCATION para resolver friendlyName después de
-                        // terminar la ventana UDP. Hacer HTTP dentro del receive loop
-                        // bloqueaba respuestas SSDP de otros dispositivos.
-                        if (location != null && !location.isEmpty()) {
-                            locations.put(remoteIp, location);
-                        }
-
-                        if (candidate != null && candidateScore > 0) {
-                            int currentBest = bestScores.getOrDefault(remoteIp, 0);
-                            if (candidateScore > currentBest) {
-                                bestNames.put(remoteIp, candidate);
-                                bestScores.put(remoteIp, candidateScore);
-                                Log.i(TAG, "  🏷️  " + remoteIp + " → \"" + candidate + "\" (score=" + candidateScore + ")");
-                            }
-                        }
+                    Result result = results.computeIfAbsent(ip, ignored -> new Result());
+                    result.ip = ip;
+                    if (server != null) result.server = server;
+                    if (usn != null) result.usn = usn;
+                    if (location != null) {
+                        result.location = location;
+                        locations.put(ip, location);
                     }
+                    result.addService("UPnP/SSDP");
+                    if (st != null) result.addService(shortUpnpType(st));
+
+                    String typeSignals = joinSignals(usn, st);
+                    String inferredType = inferUpnpDeviceType(typeSignals);
+                    if (inferredType != null) result.deviceType = inferredType;
+
+                    NameCandidate candidate = nameFromUpnpType(typeSignals);
+                    if (candidate != null) result.offerName(candidate.name, candidate.score);
                 } catch (java.net.SocketTimeoutException e) {
                     break;
                 }
@@ -142,8 +134,8 @@ public class SsdpDiscovery {
 
             Log.d(TAG, "SSDP: " + responseCount + " respuestas recibidas");
 
-            // Resolver descripciones UPnP en paralelo una vez terminado el receive
-            // loop. Así ningún GET lento impide recibir respuestas multicast restantes.
+            // Las descripciones XML se resuelven fuera del receive loop para no perder
+            // anuncios de otros equipos por una petición HTTP lenta.
             if (!locations.isEmpty()) {
                 int workers = Math.min(8, locations.size());
                 ExecutorService executor = Executors.newFixedThreadPool(Math.max(1, workers));
@@ -151,16 +143,28 @@ public class SsdpDiscovery {
                     String ip = entry.getKey();
                     String location = entry.getValue();
                     executor.execute(() -> {
-                        String friendlyName = fetchFriendlyName(location, ip);
-                        if (friendlyName == null || friendlyName.isEmpty()) return;
-                        int score = scoreFriendlyName(friendlyName);
-                        synchronized (bestNames) {
-                            int currentBest = bestScores.getOrDefault(ip, 0);
-                            if (score > currentBest) {
-                                bestNames.put(ip, friendlyName);
-                                bestScores.put(ip, score);
-                                Log.i(TAG, "  🏷️  " + ip + " → \"" + friendlyName
-                                        + "\" (XML score=" + score + ")");
+                        Description description = fetchDescription(location, ip, network);
+                        if (description == null) return;
+                        synchronized (results) {
+                            Result result = results.computeIfAbsent(ip, ignored -> new Result());
+                            result.ip = ip;
+                            if (description.friendlyName != null) {
+                                result.offerName(description.friendlyName,
+                                        scoreFriendlyName(description.friendlyName));
+                            }
+                            if (description.manufacturer != null) result.manufacturer = description.manufacturer;
+                            if (description.model != null) result.model = description.model;
+                            if (description.deviceType != null) {
+                                String inferred = inferUpnpDeviceType(description.deviceType);
+                                if (inferred != null) result.deviceType = inferred;
+                                result.addService(shortUpnpType(description.deviceType));
+                            }
+
+                            // Si no hay friendlyName, fabricante+modelo sigue siendo una
+                            // identidad autoanunciada mucho mejor que el software SERVER.
+                            if (description.friendlyName == null) {
+                                String product = joinProduct(description.manufacturer, description.model);
+                                if (product != null) result.offerName(product, 6);
                             }
                         }
                     });
@@ -174,7 +178,6 @@ public class SsdpDiscovery {
                     executor.shutdownNow();
                 }
             }
-
         } catch (Exception e) {
             Log.e(TAG, "Error en SSDP discovery: " + e.getMessage(), e);
         } finally {
@@ -183,106 +186,46 @@ public class SsdpDiscovery {
             }
         }
 
-        long elapsed = System.currentTimeMillis() - t0;
-        Log.i(TAG, "✅ SSDP completado en " + elapsed + " ms — " + bestNames.size() + " dispositivos");
-        Log.i(TAG, "═══════════════════════════════════════");
-        return bestNames;
-    }
-
-    // ═══════════════════════ Scoring system ════════════════════════
-
-    /**
-     * Puntuación para tipos UPnP extraídos del USN sin depender de fabricantes.
-     */
-    private static UsnResult parseUsn(String usn) {
-        if (usn == null || usn.isEmpty()) return null;
-
-        int colon = usn.indexOf("::");
-        String value = colon >= 0 ? usn.substring(colon + 2) : usn;
-        String lower = value.toLowerCase(java.util.Locale.ROOT);
-
-        if (lower.contains("internetgatewaydevice"))
-            return new UsnResult("Router / Puerta de enlace", 8);
-        if (lower.contains("wlanaccesspoint"))
-            return new UsnResult("Punto de acceso", 7);
-        if (lower.contains("mediarenderer"))
-            return new UsnResult("Reproductor multimedia", 6);
-        if (lower.contains("mediaserver"))
-            return new UsnResult("Servidor multimedia", 6);
-        if (lower.contains("printer"))
-            return new UsnResult("Impresora", 6);
-        if (lower.contains("dial-multiscreen"))
-            return new UsnResult("Receptor multimedia", 7);
-
-        // USN suele ser UUID + URN. No usar el UUID como nombre: no es identidad humana.
-        return null;
-    }
-
-    /**
-     * Extrae un token de producto útil del header SERVER sin tablas de marcas.
-     */
-    private static ServerResult parseServer(String server) {
-        if (server == null || server.isEmpty()) return null;
-
-        String normalized = server.trim().replaceAll("\\s+", " ");
-        String[] tokens = normalized.split("[\\s/,;()]+");
-        for (String token : tokens) {
-            token = token.trim();
-            if (token.length() >= 4 && token.length() <= 48 && !isGenericToken(token)
-                    && !token.matches(".*\\d+\\.\\d+\\.\\d+.*")) {
-                return new ServerResult(token, 3);
+        // Dar siempre una identidad útil sin convertir SERVER (p.ej. lighttpd) en
+        // nombre del equipo. SERVER se conserva únicamente como evidencia técnica.
+        for (Result result : results.values()) {
+            if (!isUseful(result.name)) {
+                if (isUseful(result.deviceType)) result.name = result.deviceType;
+                else result.name = "Dispositivo UPnP";
             }
         }
-        return null;
+
+        long elapsed = System.currentTimeMillis() - t0;
+        Log.i(TAG, "✅ SSDP completado en " + elapsed + " ms — " + results.size() + " dispositivos");
+        Log.i(TAG, "═══════════════════════════════════════");
+        return results;
     }
 
-    private static boolean isGenericToken(String token) {
-        String upper = token.toUpperCase();
-        return upper.equals("UPNP") || upper.equals("HTTP") || upper.equals("LINUX")
-                || upper.equals("POSIX") || upper.equals("PORTABLE") || upper.equals("SDK")
-                || upper.equals("FOR") || upper.equals("DEVICES") || upper.equals("DLNADOC")
-                || upper.startsWith("1.") || upper.startsWith("2.") || upper.startsWith("3.")
-                || upper.startsWith("4.") || upper.startsWith("5.")
-                || upper.startsWith("PLATFORM") || upper.startsWith("HIS/");
-    }
-
-    private static int scoreFriendlyName(String name) {
-        if (name == null) return 0;
-        String cleaned = name.trim();
-        if (cleaned.length() < 2 || cleaned.matches("(?i)device|unknown|upnp")) return 1;
-        String upper = cleaned.toUpperCase(java.util.Locale.ROOT);
-        if (upper.contains("IGD") || upper.contains("GATEWAY") || upper.contains("ROUTER")) return 6;
-        return 7;
-    }
-
-    // ═══════════════════════ XML Friendly Name ═══════════════════
-
-    private static String fetchFriendlyName(String locationUrl, String responderIp) {
+    private static Description fetchDescription(String locationUrl, String responderIp, Network network) {
         HttpURLConnection conn = null;
         try {
             URL url = new URL(locationUrl);
             String scheme = url.getProtocol();
-            if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
-                return null;
-            }
+            if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) return null;
+
             String host = url.getHost();
             if (host == null || responderIp == null || !host.equalsIgnoreCase(responderIp)) {
                 Log.v(TAG, "LOCATION ignorado fuera del host respondedor: " + locationUrl);
                 return null;
             }
 
-            conn = (HttpURLConnection) url.openConnection();
+            conn = (HttpURLConnection) (network != null
+                    ? network.openConnection(url) : url.openConnection());
             conn.setConnectTimeout(1200);
             conn.setReadTimeout(1200);
             conn.setRequestMethod("GET");
             conn.setRequestProperty("User-Agent", "WScanner/1.0");
             conn.setInstanceFollowRedirects(false);
 
-            int code = conn.getResponseCode();
-            if (code != 200) return null;
+            if (conn.getResponseCode() != 200) return null;
 
             BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(conn.getInputStream(), "UTF-8"));
+                    new InputStreamReader(conn.getInputStream(), java.nio.charset.StandardCharsets.UTF_8));
             StringBuilder xml = new StringBuilder();
             char[] buf = new char[2048];
             int read;
@@ -291,27 +234,98 @@ public class SsdpDiscovery {
                 xml.append(buf, 0, Math.min(read, remaining));
             }
             reader.close();
-
-            String xmlStr = xml.toString();
-            String friendlyName = cleanXmlValue(extractTag(xmlStr, "friendlyName"));
-            String manufacturer = cleanXmlValue(extractTag(xmlStr, "manufacturer"));
-            String modelName = cleanXmlValue(extractTag(xmlStr, "modelName"));
-            String modelNumber = cleanXmlValue(extractTag(xmlStr, "modelNumber"));
-
-            if (friendlyName != null && scoreFriendlyName(friendlyName) >= 5) return friendlyName;
-            if (manufacturer != null && modelName != null && !modelName.equalsIgnoreCase(manufacturer))
-                return manufacturer + " " + modelName;
-            if (modelName != null && modelNumber != null && !modelName.contains(modelNumber))
-                return modelName + " " + modelNumber;
-            if (modelName != null) return modelName;
-            if (manufacturer != null) return manufacturer;
-            return friendlyName;
+            return parseDescription(xml.toString());
         } catch (Exception e) {
             Log.v(TAG, "Error leyendo XML UPnP local: " + e.getMessage());
             return null;
         } finally {
-            if (conn != null) { try { conn.disconnect(); } catch (Exception ignored) {} }
+            if (conn != null) {
+                try { conn.disconnect(); } catch (Exception ignored) {}
+            }
         }
+    }
+
+    static Description parseDescription(String xml) {
+        if (xml == null || xml.isEmpty()) return null;
+        Description result = new Description();
+        result.friendlyName = cleanXmlValue(extractTag(xml, "friendlyName"));
+        result.manufacturer = cleanXmlValue(extractTag(xml, "manufacturer"));
+        String modelName = cleanXmlValue(extractTag(xml, "modelName"));
+        String modelNumber = cleanXmlValue(extractTag(xml, "modelNumber"));
+        result.model = joinModel(modelName, modelNumber);
+        result.deviceType = cleanXmlValue(extractTag(xml, "deviceType"));
+        if (!isUseful(result.friendlyName) && !isUseful(result.manufacturer)
+                && !isUseful(result.model) && !isUseful(result.deviceType)) return null;
+        return result;
+    }
+
+    static String inferUpnpDeviceType(String raw) {
+        if (raw == null) return null;
+        String lower = raw.toLowerCase(Locale.ROOT);
+        if (lower.contains("internetgatewaydevice")) return "Router / Puerta de enlace";
+        if (lower.contains("wlanaccesspoint") || lower.contains("accesspoint")) return "Punto de acceso";
+        if (lower.contains("mediarenderer") || lower.contains("dial-multiscreen")) return "Reproductor multimedia";
+        if (lower.contains("mediaserver")) return "Servidor multimedia";
+        if (lower.contains("printer")) return "Impresora";
+        if (lower.contains("scanner")) return "Escáner";
+        if (lower.contains("networkvideotransmitter") || lower.contains("digital_security_camera")
+                || lower.contains("camera")) return "Cámara / dispositivo de video";
+        return null;
+    }
+
+    private static NameCandidate nameFromUpnpType(String raw) {
+        String type = inferUpnpDeviceType(raw);
+        return type == null ? null : new NameCandidate(type, 5);
+    }
+
+    private static int scoreFriendlyName(String name) {
+        if (!isUseful(name)) return 0;
+        String cleaned = name.trim();
+        if (cleaned.matches("(?i)device|unknown|upnp|rootdevice")) return 1;
+        return 8;
+    }
+
+    private static String shortUpnpType(String raw) {
+        if (!isUseful(raw)) return null;
+        String value = raw.trim();
+        int lastColon = value.lastIndexOf(':');
+        if (lastColon > 0 && lastColon + 1 < value.length()
+                && value.substring(lastColon + 1).matches("\\d+")) {
+            value = value.substring(0, lastColon);
+            lastColon = value.lastIndexOf(':');
+        }
+        if (lastColon >= 0 && lastColon + 1 < value.length()) value = value.substring(lastColon + 1);
+        value = value.replace("uuid:", "").trim();
+        return value.length() > 64 ? value.substring(0, 64) : value;
+    }
+
+    private static String joinSignals(String... values) {
+        StringBuilder out = new StringBuilder();
+        for (String value : values) {
+            if (!isUseful(value)) continue;
+            if (out.length() > 0) out.append(' ');
+            out.append(value);
+        }
+        return out.toString();
+    }
+
+    private static String joinProduct(String manufacturer, String model) {
+        if (isUseful(manufacturer) && isUseful(model)) {
+            if (model.toLowerCase(Locale.ROOT).contains(manufacturer.toLowerCase(Locale.ROOT))) return model;
+            return manufacturer + " " + model;
+        }
+        if (isUseful(model)) return model;
+        if (isUseful(manufacturer)) return manufacturer;
+        return null;
+    }
+
+    private static String joinModel(String modelName, String modelNumber) {
+        if (isUseful(modelName) && isUseful(modelNumber)
+                && !modelName.toLowerCase(Locale.ROOT).contains(modelNumber.toLowerCase(Locale.ROOT))) {
+            return modelName + " " + modelNumber;
+        }
+        if (isUseful(modelName)) return modelName;
+        return isUseful(modelNumber) ? modelNumber : null;
     }
 
     private static String cleanXmlValue(String value) {
@@ -321,35 +335,21 @@ public class SsdpDiscovery {
                 .replace("&lt;", "<")
                 .replace("&gt;", ">")
                 .replace("&quot;", "\"")
+                .replace("&#39;", "'")
                 .trim().replaceAll("\\s+", " ");
-        if (cleaned.isEmpty() || cleaned.length() > 96) return null;
+        if (cleaned.isEmpty() || cleaned.length() > 160) return null;
         return cleaned;
     }
 
     private static String extractTag(String xml, String tag) {
-        String openTag = "<" + tag + ">";
-        String closeTag = "</" + tag + ">";
-        int start = xml.indexOf(openTag);
-        if (start < 0) {
-            openTag = "<" + tag + " ";
-            start = xml.indexOf(openTag);
-            if (start >= 0) {
-                int gt = xml.indexOf(">", start);
-                if (gt < 0) return null;
-                start = gt + 1;
-                int end = xml.indexOf(closeTag, start);
-                if (end < 0) return null;
-                return xml.substring(start, end).trim();
-            }
-            return null;
-        }
-        start += openTag.length();
-        int end = xml.indexOf(closeTag, start);
-        if (end < 0) return null;
-        return xml.substring(start, end).trim();
+        // Acepta prefijos de namespace simples: <u:friendlyName> además del tag plano.
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
+                "(?is)<(?:[A-Za-z0-9_\\-]+:)?" + java.util.regex.Pattern.quote(tag)
+                        + "(?:\\s[^>]*)?>(.*?)</(?:[A-Za-z0-9_\\-]+:)?"
+                        + java.util.regex.Pattern.quote(tag) + "\\s*>");
+        java.util.regex.Matcher matcher = pattern.matcher(xml);
+        return matcher.find() ? matcher.group(1).trim() : null;
     }
-
-    // ═══════════════════════ HTTP Header Parser ═══════════════════
 
     private static String extractHeader(String http, String headerName) {
         if (http == null || headerName == null) return null;
@@ -363,17 +363,66 @@ public class SsdpDiscovery {
         return null;
     }
 
-    // ═══════════════════════ Result holders ═══════════════════════
-
-    private static class UsnResult {
-        final String name;
-        final int score;
-        UsnResult(String name, int score) { this.name = name; this.score = score; }
+    private static String cleanValue(String value, int max) {
+        if (value == null) return null;
+        String cleaned = value.trim().replaceAll("\\s+", " ");
+        if (cleaned.isEmpty()) return null;
+        return cleaned.length() > max ? cleaned.substring(0, max) : cleaned;
     }
 
-    private static class ServerResult {
+    private static boolean isUseful(String value) {
+        return value != null && !value.trim().isEmpty();
+    }
+
+    private static final class NameCandidate {
         final String name;
         final int score;
-        ServerResult(String name, int score) { this.name = name; this.score = score; }
+        NameCandidate(String name, int score) { this.name = name; this.score = score; }
+    }
+
+    static final class Description {
+        String friendlyName;
+        String manufacturer;
+        String model;
+        String deviceType;
+    }
+
+    public static final class Result {
+        public String ip;
+        public String name;
+        public String manufacturer;
+        public String model;
+        public String deviceType;
+        public String server;
+        public String usn;
+        public String location;
+        public final List<String> services = new ArrayList<>();
+        private int nameScore;
+
+        void offerName(String candidate, int score) {
+            if (!isUseful(candidate) || score <= nameScore) return;
+            name = candidate.trim();
+            nameScore = score;
+        }
+
+        void addService(String service) {
+            if (!isUseful(service) || services.contains(service)) return;
+            services.add(service);
+        }
+
+        public String displayName() {
+            if (isUseful(name)) return name;
+            if (isUseful(deviceType)) return deviceType;
+            return "Dispositivo UPnP";
+        }
+
+        public String detail() {
+            List<String> values = new ArrayList<>();
+            if (isUseful(manufacturer)) values.add("Fabricante: " + manufacturer);
+            if (isUseful(model)) values.add("Modelo: " + model);
+            if (isUseful(server)) values.add("SERVER: " + server);
+            if (isUseful(usn)) values.add("USN: " + usn);
+            return values.isEmpty() ? null : String.join(" · ", values);
+        }
     }
 }

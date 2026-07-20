@@ -7,8 +7,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
-import android.net.wifi.WifiInfo;
-import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -104,8 +102,9 @@ public class MainActivity extends AppCompatActivity
     // Active scan mode (monitoreo continuo)
     private NetworkScanner networkScanner;
     private boolean activeScanMode = false;
-    private int activeScanCycle = 0;
     private Handler activeScanHandler;
+    private final ScanCycleState scanCycleState = new ScanCycleState();
+    private String inventoryCidr = null;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -159,12 +158,29 @@ public class MainActivity extends AppCompatActivity
 
         // RecyclerView
         RecyclerView rv = findViewById(R.id.listDevices);
-        rv.setLayoutManager(new LinearLayoutManager(this));
+        // El monitor actualiza una misma fila varias veces en pocos milisegundos
+        // (TCP, mDNS, SSDP, etc.). Las animaciones predictivas y de cambio del
+        // RecyclerView pueden intentar reusar/adjuntar el mismo ViewHolder mientras
+        // otro layout sigue pendiente, provocando "child which is not detached".
+        // La lista ya anima el estado visual dentro del adapter, por lo que estas
+        // animaciones internas no aportan nada y se desactivan de forma segura.
+        LinearLayoutManager deviceLayoutManager = new LinearLayoutManager(this) {
+            @Override
+            public boolean supportsPredictiveItemAnimations() {
+                return false;
+            }
+        };
+        rv.setLayoutManager(deviceLayoutManager);
+        rv.setItemAnimator(null);
         adapter = new DeviceAdapter(devices);
         adapter.setOnDeviceClickListener(this::showDeviceDetail);
         rv.setAdapter(adapter);
 
-        // Mostrar info de red actual
+        // Motor de escaneo y monitor continuo
+        networkScanner = new NetworkScanner();
+        activeScanHandler = new Handler(Looper.getMainLooper());
+
+        // Mostrar info de red actual usando el mismo rango real que escanea el motor
         updateNetworkInfo();
 
         // FAB click: stop if scanning, start if idle
@@ -210,34 +226,17 @@ public class MainActivity extends AppCompatActivity
         // Premium: setup empty state pulse animation
         setupEmptyPulse();
 
-        // Active scan infrastructure
-        networkScanner = new NetworkScanner();
-        activeScanHandler = new Handler(Looper.getMainLooper());
     }
 
     // ── Info de red ────────────────────────────────────────────────
 
     private void updateNetworkInfo() {
         try {
-            WifiManager wifi = (WifiManager) getApplicationContext()
-                    .getSystemService(WIFI_SERVICE);
-            if (wifi != null && wifi.getConnectionInfo() != null) {
-                WifiInfo info = wifi.getConnectionInfo();
-                int ip = info.getIpAddress();
-                if (ip != 0) {
-                    String subnet = String.format("%d.%d.%d.0/24",
-                            (ip & 0xff), (ip >> 8 & 0xff), (ip >> 16 & 0xff));
-                    txtSubnetValue.setText(subnet);
-                }
-                android.net.DhcpInfo dhcp = wifi.getDhcpInfo();
-                if (dhcp != null && dhcp.gateway != 0) {
-                    int gw = dhcp.gateway;
-                    txtGatewayValue.setText(String.format("%d.%d.%d.%d",
-                            (gw & 0xff), (gw >> 8 & 0xff),
-                            (gw >> 16 & 0xff), (gw >> 24 & 0xff)));
-                }
+            NetworkScanner.NetworkInfo info = networkScanner.getNetworkInfo(this);
+            if (info != null) {
+                txtSubnetValue.setText(info.cidr);
+                txtGatewayValue.setText(info.gateway != null ? info.gateway : "—");
 
-                // Premium: fade-in animation for network info header
                 if (layoutNetworkInfo.getVisibility() != View.VISIBLE) {
                     layoutNetworkInfo.setAlpha(0f);
                     layoutNetworkInfo.setTranslationY(-20f);
@@ -250,8 +249,8 @@ public class MainActivity extends AppCompatActivity
                             .start();
                 }
             }
-        } catch (Exception ignored) {
-            Log.w(TAG, "No se pudo leer info de WiFi");
+        } catch (Exception e) {
+            Log.w(TAG, "No se pudo leer info de red: " + e.getMessage());
         }
     }
 
@@ -362,16 +361,33 @@ public class MainActivity extends AppCompatActivity
     // ── Escaneo ────────────────────────────────────────────────────
 
     private void startScan() {
-        if (activeScanCycle == 0) {
-            Log.i(TAG, "🧹 Limpiando lista previa (" + devices.size() + " dispositivos)");
-            hasScannedBefore = true;
+        if (isScanning) return;
+        // El Handler se usa exclusivamente para programar el siguiente ciclo del
+        // monitor. Si el usuario inicia uno manualmente durante la pausa, cancelar
+        // el callback pendiente evita dos escaneos solapados sobre el mismo inventario.
+        if (activeScanMode) activeScanHandler.removeCallbacksAndMessages(null);
+
+        NetworkScanner.NetworkInfo networkInfo = networkScanner.getNetworkInfo(this);
+        String nextCidr = networkInfo != null ? networkInfo.cidr : null;
+        boolean networkChanged = inventoryCidr != null && nextCidr != null
+                && !inventoryCidr.equals(nextCidr);
+
+        if (networkChanged) {
+            Log.i(TAG, "🌐 Cambio de red " + inventoryCidr + " → " + nextCidr
+                    + "; se reinicia el inventario para no mezclar subredes");
             devices.clear();
             ipIndex.clear();
             adapter.notifyDataSetChanged();
-        } else {
-            Log.i(TAG, "🔄 Ciclo " + activeScanCycle + " — " + devices.size() + " dispositivos en lista");
-            markAllPending();
+        } else if (!devices.isEmpty()) {
+            Log.i(TAG, "🔄 Nuevo ciclo — " + devices.size()
+                    + " dispositivos conservan su último estado hasta finalizar el barrido");
         }
+        if (nextCidr != null) inventoryCidr = nextCidr;
+        hasScannedBefore = true;
+
+        // No se marca ningún equipo offline al comenzar. El ciclo registra lo visto
+        // y solo al finalizar degrada a gris los dispositivos realmente ausentes.
+        scanCycleState.beginCycle();
 
         updateNetworkInfo();
         setScanning(true);
@@ -381,6 +397,7 @@ public class MainActivity extends AppCompatActivity
             @Override
             public void onDeviceFound(Device device) {
                 runOnUiThread(() -> {
+                    scanCycleState.markSeen(device.ip);
                     Integer existingIdx = ipIndex.get(device.ip);
 
                     if (existingIdx != null) {
@@ -425,9 +442,20 @@ public class MainActivity extends AppCompatActivity
             @Override
             public void onFinished(int totalFound) {
                 runOnUiThread(() -> {
+                    // La ausencia se decide únicamente cuando termina el ciclo completo.
+                    // Esto evita falsos "offline" mientras el nuevo barrido todavía avanza.
+                    int onlineNow = scanCycleState.finishCycle(devices);
+                    adapter.notifyDataSetChanged();
+
                     if (isScanning) {  // don't overwrite UI if user already stopped
                         setScanning(false);
-                        txtStatus.setText("Escaneo completo — " + totalFound + " dispositivo(s)");
+                        if (activeScanMode) {
+                            txtStatus.setText("Monitor — " + onlineNow + " activos · "
+                                    + devices.size() + " conocidos");
+                        } else {
+                            txtStatus.setText("Escaneo completo — " + onlineNow + " activos · "
+                                    + devices.size() + " conocidos");
+                        }
                         txtDeviceCount.setText(String.valueOf(devices.size()));
                         HapticUtil.performHeavy(btnScan);
                     }
@@ -435,7 +463,6 @@ public class MainActivity extends AppCompatActivity
                     if (activeScanMode) {
                         activeScanHandler.postDelayed(() -> {
                             if (activeScanMode) {
-                                activeScanCycle++;
                                 startScan();
                             }
                         }, 5000);
@@ -453,7 +480,6 @@ public class MainActivity extends AppCompatActivity
             stopActiveScan();
         } else {
             activeScanMode = true;
-            activeScanCycle = 0;
             updateMonitorChipStyle();
             startScan();
         }
@@ -461,20 +487,11 @@ public class MainActivity extends AppCompatActivity
 
     private void stopActiveScan() {
         activeScanMode = false;
-        activeScanCycle = 0;
         activeScanHandler.removeCallbacksAndMessages(null);
-        for (Device d : devices) {
-            d.online = true;
-        }
+        // Conservar el último estado verificado. Detener el monitor no debe revivir
+        // artificialmente dispositivos que ya habían quedado offline.
         adapter.notifyDataSetChanged();
         updateMonitorChipStyle();
-    }
-
-    private void markAllPending() {
-        for (Device d : devices) {
-            d.online = false;
-        }
-        adapter.notifyDataSetChanged();
     }
 
     private void updateMonitorChipStyle() {
@@ -595,11 +612,21 @@ public class MainActivity extends AppCompatActivity
             macRow.setVisibility(View.GONE);
         }
 
-        // Vendor
+        // Fabricante / modelo / vendor disponibles por metadatos locales
         View vendorRow = findViewById(R.id.detailVendorRow);
         TextView vendorView = findViewById(R.id.detailVendor);
-        if (d.vendor != null && !d.vendor.equals("Desconocido") && !d.vendor.equals(d.name)) {
-            vendorView.setText(d.vendor);
+        StringBuilder identityMeta = new StringBuilder();
+        if (d.manufacturer != null && !d.manufacturer.isEmpty()) identityMeta.append(d.manufacturer);
+        if (d.model != null && !d.model.isEmpty()) {
+            if (identityMeta.length() > 0) identityMeta.append(" · ");
+            identityMeta.append(d.model);
+        }
+        if (identityMeta.length() == 0 && d.vendor != null
+                && !d.vendor.equals("Desconocido") && !d.vendor.equals(d.name)) {
+            identityMeta.append(d.vendor);
+        }
+        if (identityMeta.length() > 0) {
+            vendorView.setText(identityMeta.toString());
             vendorRow.setVisibility(View.VISIBLE);
         } else {
             vendorRow.setVisibility(View.GONE);
@@ -616,8 +643,18 @@ public class MainActivity extends AppCompatActivity
         // Extra detail
         View extraRow = findViewById(R.id.detailExtraRow);
         TextView extraView = findViewById(R.id.detailExtra);
+        StringBuilder extra = new StringBuilder();
+        if (d.deviceType != null && !d.deviceType.isEmpty()) extra.append("Tipo: ").append(d.deviceType);
+        if (d.osHint != null && !d.osHint.isEmpty()) {
+            if (extra.length() > 0) extra.append(" · ");
+            extra.append("SO/servicio: ").append(d.osHint);
+        }
         if (d.discoveryDetail != null && !d.discoveryDetail.isEmpty()) {
-            extraView.setText(d.discoveryDetail);
+            if (extra.length() > 0) extra.append("\n");
+            extra.append(d.discoveryDetail);
+        }
+        if (extra.length() > 0) {
+            extraView.setText(extra.toString());
             extraRow.setVisibility(View.VISIBLE);
         } else {
             extraRow.setVisibility(View.GONE);

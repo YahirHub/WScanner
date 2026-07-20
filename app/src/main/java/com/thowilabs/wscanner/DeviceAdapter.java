@@ -254,6 +254,16 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.Holder>
         if (d.vendor != null && !d.vendor.equals("Desconocido") && !d.vendor.equals(d.name)) {
             info += (info.isEmpty() ? "" : "  ·  ") + d.vendor;
         }
+        if (d.manufacturer != null && !d.manufacturer.isEmpty()
+                && (d.vendor == null || !d.manufacturer.equalsIgnoreCase(d.vendor))) {
+            info += (info.isEmpty() ? "" : "  ·  ") + d.manufacturer;
+        }
+        if (d.model != null && !d.model.isEmpty()) {
+            info += (info.isEmpty() ? "" : "  ·  ") + d.model;
+        }
+        if (d.deviceType != null && !d.deviceType.isEmpty() && !d.deviceType.equalsIgnoreCase(d.name)) {
+            info += (info.isEmpty() ? "" : "  ·  ") + d.deviceType;
+        }
         h.txtVendor.setText(info);
         h.txtVendor.setVisibility(info.isEmpty() ? View.GONE : View.VISIBLE);
 
@@ -274,17 +284,16 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.Holder>
             h.txtType.setVisibility(View.GONE);
         }
 
-        // ── Premium: Staggered fade-in + slide-up on bind ──
-        h.itemView.setAlpha(0f);
-        h.itemView.setTranslationY(20f);
+        // Actualizar estado sin reiniciar alpha a cero. En modo monitor una tarjeta
+        // existente puede recibir varias señales por ciclo; reanimarla desde 0 en cada
+        // notifyItemChanged provocaba parpadeos y daba sensación de desconexión.
         float targetAlpha = d.online ? 1f : 0.45f;
-        h.itemView.animate()
-                .alpha(targetAlpha)
-                .translationY(0f)
-                .setDuration(350)
-                .setStartDelay(Math.min(i * 40L, 300L))
-                .setInterpolator(new android.view.animation.DecelerateInterpolator())
-                .start();
+        // El monitor puede reenlazar esta fila muchas veces durante un mismo ciclo.
+        // Cancelar cualquier animación heredada y aplicar el estado directamente evita
+        // que una ViewPropertyAnimator sobreviva al reciclado/reatachado del ViewHolder.
+        h.itemView.animate().cancel();
+        h.itemView.setTranslationY(0f);
+        h.itemView.setAlpha(targetAlpha);
 
         // ── Online/offline badge ──
         android.view.ViewGroup parent = (android.view.ViewGroup) h.iconView.getParent();
@@ -378,49 +387,35 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.Holder>
         if (d.vendor != null && d.vendor.toLowerCase().contains(query)) return true;
         if (d.mac != null && d.mac.toLowerCase().contains(query)) return true;
         if (d.discoveryMethod != null && d.discoveryMethod.toLowerCase().contains(query)) return true;
+        if (d.deviceType != null && d.deviceType.toLowerCase().contains(query)) return true;
+        if (d.manufacturer != null && d.manufacturer.toLowerCase().contains(query)) return true;
+        if (d.model != null && d.model.toLowerCase().contains(query)) return true;
+        if (d.osHint != null && d.osHint.toLowerCase().contains(query)) return true;
         return false;
     }
 
     private String deviceIconName(Device d) {
-        String v = (d.vendor != null) ? d.vendor.toLowerCase() : "";
-        String n = d.name.toLowerCase();
-        String combined = v + " " + n;
+        String type = d.deviceType == null ? "" : d.deviceType.toLowerCase();
+        String name = d.name == null ? "" : d.name.toLowerCase();
+        String signals = type + " " + name + " " + String.join(" ", d.serviceNames).toLowerCase();
 
-        if (combined.contains("router") || combined.contains("gateway") || combined.contains("cisco")
-                || combined.contains("tp-link") || combined.contains("d-link") || combined.contains("netgear")
-                || combined.contains("mikrotik") || combined.contains("ubiquiti") || combined.contains("huawei")
-                || combined.contains("zte") || combined.contains("fiberhome"))
-            return "cmd_router_network";
-        if (combined.contains("samsung") || combined.contains("apple") || combined.contains("iphone")
-                || combined.contains("xiaomi") || combined.contains("oneplus") || combined.contains("google")
-                || combined.contains("motorola") || combined.contains("nokia") || combined.contains("sony")
-                || combined.contains("oppo") || combined.contains("vivo"))
-            return "cmd_cellphone";
-        if (combined.contains("tv") || combined.contains("television") || combined.contains("roku")
-                || combined.contains("chromecast") || combined.contains("hisense") || combined.contains("tcl")
-                || combined.contains("philips") || combined.contains("cast receiver"))
-            return "cmd_television";
-        if (combined.contains("printer") || combined.contains("brother") || combined.contains("epson")
-                || combined.contains("canon") || combined.contains("xerox") || combined.contains("hewlett"))
-            return "cmd_printer";
-        if (combined.contains("camera") || combined.contains("nest") || combined.contains("ring")
-                || combined.contains("arlo") || combined.contains("hikvision") || combined.contains("dahua"))
-            return "cmd_camera";
-        if (combined.contains("alexa") || combined.contains("echo") || combined.contains("speaker")
-                || combined.contains("sonos") || combined.contains("jbl"))
-            return "cmd_speaker";
-        if (combined.contains("playstation") || combined.contains("xbox") || combined.contains("nintendo"))
-            return "cmd_gamepad_variant";
-        if (combined.contains("servidor") || combined.contains("server") || combined.contains("nas")
-                || combined.contains("synology") || combined.contains("qnap")
-                || combined.contains("web") || combined.contains("linux"))
-            return "cmd_server";
-        if (combined.contains("raspberry") || combined.contains("arduino") || combined.contains("esp")
-                || combined.contains("mqtt") || combined.contains("iot"))
-            return "cmd_chip";
-        if (combined.contains("tablet") || combined.contains("ipad"))
-            return "cmd_tablet_android";
-
+        if (signals.contains("router") || signals.contains("gateway")
+                || signals.contains("infraestructura de red") || signals.contains("punto de acceso")
+                || signals.contains("switch de red")) return "cmd_router_network";
+        if (signals.contains("cámara") || signals.contains("camera") || signals.contains("video")
+                || signals.contains("onvif")) return "cmd_camera";
+        if (signals.contains("impresora") || signals.contains("printer")) return "cmd_printer";
+        if (signals.contains("reproductor multimedia") || signals.contains("android tv")
+                || signals.contains("airplay") || signals.contains("googlecast")) return "cmd_television";
+        if (signals.contains("iot") || signals.contains("domótica") || signals.contains("homekit")
+                || signals.contains("mqtt")) return "cmd_chip";
+        if (signals.contains("dispositivo android") || signals.contains("teléfono")
+                || signals.contains("phone")) return "cmd_cellphone";
+        if (signals.contains("tablet")) return "cmd_tablet_android";
+        if (signals.contains("servidor") || signals.contains("nas") || signals.contains("ssh")
+                || signals.contains("nfs") || signals.contains("smb")) return "cmd_server";
+        if (signals.contains("pc") || signals.contains("estación de trabajo")
+                || signals.contains("rdp") || signals.contains("vnc")) return "cmd_laptop";
         return "cmd_laptop";
     }
 
@@ -433,10 +428,14 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.Holder>
     private String methodLabel(String method) {
         switch (method) {
             case "mDNS":     return "Bonjour (mDNS)";
-            case "SSDP":     return "UPnP (SSDP)";
-            case "NetBIOS":  return "NetBIOS";
+            case "SSDP":          return "UPnP (SSDP)";
+            case "WS-Discovery": return "WS-Discovery";
+            case "SNMP":          return "SNMP";
+            case "Gateway":       return "Gateway";
+            case "NetBIOS":       return "NetBIOS";
             case "DNS":      return "DNS inverso";
-            case "HTTP":     return "HTTP banner";
+            case "HTTP":     return "HTTP local";
+            case "TLS":      return "certificado TLS";
             case "OUI DB":   return "OUI (MAC)";
             default:         return method;
         }
@@ -444,10 +443,14 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.Holder>
 
     private String shortLabel(String method) {
         switch (method) {
-            case "SSDP":     return "UPnP";
-            case "mDNS":     return "MDNS";
-            case "NetBIOS":  return "NETB";
-            case "OUI DB":   return "MAC";
+            case "SSDP":          return "UPnP";
+            case "WS-Discovery": return "WSD";
+            case "SNMP":          return "SNMP";
+            case "Gateway":       return "GW";
+            case "mDNS":          return "MDNS";
+            case "NetBIOS":       return "NETB";
+            case "OUI DB":        return "MAC";
+            case "TLS":           return "TLS";
             default:         return method.length() > 5
                     ? method.substring(0, 4).toUpperCase() : method.toUpperCase();
         }

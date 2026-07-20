@@ -1,5 +1,6 @@
 package com.thowilabs.wscanner;
 
+import android.net.Network;
 import android.util.Log;
 
 import java.net.DatagramPacket;
@@ -37,7 +38,23 @@ public class NetBiosDiscovery {
      * @return Map IP → nombre NetBIOS
      */
     public static Map<String, String> discover(Set<String> ips) {
-        Map<String, String> results = new ConcurrentHashMap<>();
+        return discover(ips, null);
+    }
+
+    public static Map<String, String> discover(Set<String> ips, Network network) {
+        Map<String, String> names = new HashMap<>();
+        for (Map.Entry<String, Result> entry : discoverDetailed(ips, network).entrySet()) {
+            if (entry.getValue().name != null) names.put(entry.getKey(), entry.getValue().name);
+        }
+        return names;
+    }
+
+    /**
+     * Variante estructurada de NBSTAT. Además del nombre puede recuperar el Unit ID
+     * (normalmente la MAC anunciada por NetBIOS) y el nombre de grupo/workgroup.
+     */
+    public static Map<String, Result> discoverDetailed(Set<String> ips, Network network) {
+        Map<String, Result> results = new ConcurrentHashMap<>();
         long t0 = System.currentTimeMillis();
 
         Log.i(TAG, "═══════════════════════════════════════");
@@ -52,10 +69,11 @@ public class NetBiosDiscovery {
         ExecutorService executor = Executors.newFixedThreadPool(workers);
         for (String ip : ips) {
             executor.execute(() -> {
-                String name = probeNetBios(ip);
-                if (name != null) {
-                    results.put(ip, name);
-                    Log.i(TAG, "  🏷️  NetBIOS: " + ip + " → " + name);
+                Result result = probeNetBios(ip, network);
+                if (result != null && result.name != null) {
+                    results.put(ip, result);
+                    Log.i(TAG, "  🏷️  NetBIOS: " + ip + " → " + result.name
+                            + (result.mac == null ? "" : " · " + result.mac));
                 }
             });
         }
@@ -78,12 +96,13 @@ public class NetBiosDiscovery {
     /**
      * Envía un NBSTAT query a una IP y retorna el nombre NetBIOS principal.
      */
-    private static String probeNetBios(String ip) {
+    private static Result probeNetBios(String ip, Network network) {
         DatagramSocket socket = null;
         try {
             socket = new DatagramSocket(null);
             socket.setSoTimeout(TIMEOUT_PER_HOST_MS);
             socket.bind(new InetSocketAddress(0));
+            if (network != null) network.bindSocket(socket);
 
             // Construir paquete NBSTAT (Node Status Request)
             byte[] query = buildNbstatQuery();
@@ -97,7 +116,7 @@ public class NetBiosDiscovery {
             socket.receive(response);
 
             if (response.getLength() >= 57) {
-                return parseNbstatResponse(buf, response.getLength());
+                return parseNbstatResponseDetailed(buf, response.getLength());
             }
 
         } catch (java.net.SocketTimeoutException e) {
@@ -226,6 +245,11 @@ public class NetBiosDiscovery {
      *   Cada entrada de nombre: 18 bytes
      */
     static String parseNbstatResponse(byte[] data, int length) {
+        Result result = parseNbstatResponseDetailed(data, length);
+        return result == null ? null : result.name;
+    }
+
+    static Result parseNbstatResponseDetailed(byte[] data, int length) {
         try {
             if (data == null || length < 12) return null;
 
@@ -240,19 +264,23 @@ public class NetBiosDiscovery {
             }
 
             String fallback = null;
+            String group = null;
+            String unitId = null;
             for (int answer = 0; answer < anCount && pos < length; answer++) {
                 pos = skipEncodedName(data, pos, length);
-                if (pos < 0 || pos + 10 > length) return fallback;
+                if (pos < 0 || pos + 10 > length) return buildResult(fallback, unitId, group);
 
                 int type = readU16(data, pos);
                 int rdLength = readU16(data, pos + 8);
                 int rdata = pos + 10;
-                if (rdata + rdLength > length) return fallback;
+                if (rdata + rdLength > length) return buildResult(fallback, unitId, group);
 
                 if (type == 0x0021 && rdLength >= 1) {
                     int numNames = data[rdata] & 0xFF;
                     int namesStart = rdata + 1;
-                    if (namesStart + numNames * 18 > rdata + rdLength) return fallback;
+                    if (namesStart + numNames * 18 > rdata + rdLength) {
+                        return buildResult(fallback, unitId, group);
+                    }
 
                     for (int i = 0; i < numNames; i++) {
                         int nameStart = namesStart + i * 18;
@@ -264,25 +292,82 @@ public class NetBiosDiscovery {
 
                         boolean isUnique = (flags & 0x8000) == 0;
                         boolean isActive = (flags & 0x0400) != 0 || flags == 0;
-                        if (!isUnique || !isActive || rawName.isEmpty()
+                        if (!isActive || rawName.isEmpty()
                                 || rawName.equals("*") || rawName.startsWith("__")) {
                             continue;
                         }
 
+                        if (!isUnique) {
+                            if (group == null && (typeSuffix == 0x00 || typeSuffix == 0x1E)) {
+                                group = rawName;
+                            }
+                            continue;
+                        }
+
                         // 0x00 = workstation: normalmente el nombre humano más útil.
-                        if (typeSuffix == 0x00) return rawName;
+                        if (typeSuffix == 0x00) fallback = rawName;
                         // 0x20 = file server; conservar como fallback.
                         if (fallback == null && typeSuffix == 0x20) fallback = rawName;
                         if (fallback == null) fallback = rawName;
+                    }
+
+                    int unitIdStart = namesStart + numNames * 18;
+                    if (unitIdStart + 6 <= rdata + rdLength) {
+                        unitId = formatMac(data, unitIdStart);
                     }
                 }
 
                 pos = rdata + rdLength;
             }
-            return fallback;
+            return buildResult(fallback, unitId, group);
         } catch (Exception e) {
             Log.v(TAG, "Error parseando respuesta NBSTAT: " + e.getMessage());
             return null;
+        }
+    }
+
+    private static Result buildResult(String name, String mac, String group) {
+        if (name == null || name.trim().isEmpty()) return null;
+        Result result = new Result();
+        result.name = name.trim();
+        result.mac = mac;
+        result.group = group;
+        return result;
+    }
+
+    private static String formatMac(byte[] data, int start) {
+        if (data == null || start < 0 || start + 6 > data.length) return null;
+        boolean allZero = true;
+        boolean allFF = true;
+        StringBuilder out = new StringBuilder(17);
+        for (int i = 0; i < 6; i++) {
+            int value = data[start + i] & 0xFF;
+            allZero &= value == 0;
+            allFF &= value == 0xFF;
+            if (i > 0) out.append(':');
+            if (value < 16) out.append('0');
+            out.append(Integer.toHexString(value).toUpperCase(java.util.Locale.ROOT));
+        }
+        return allZero || allFF ? null : out.toString();
+    }
+
+    public static final class Result {
+        public String name;
+        public String mac;
+        public String group;
+
+        public String detail() {
+            StringBuilder out = new StringBuilder();
+            if (name != null) out.append("Nombre NetBIOS: ").append(name);
+            if (group != null && !group.trim().isEmpty()) {
+                if (out.length() > 0) out.append(" · ");
+                out.append("Grupo: ").append(group);
+            }
+            if (mac != null) {
+                if (out.length() > 0) out.append(" · ");
+                out.append("Unit ID: ").append(mac);
+            }
+            return out.length() == 0 ? null : out.toString();
         }
     }
 

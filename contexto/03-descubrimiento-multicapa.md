@@ -1,6 +1,6 @@
 # Fecha
 2026-07-13
-> Estado del documento: histórico. Para el pipeline vigente desde 2026-07-20 consultar `008-mejora-deteccion-offline-y-refactor-motor.md`.
+> Estado del documento: histórico. Para el pipeline vigente consultar `009-monitor-continuo-y-descubrimiento-avanzado-offline.md`.
 
 # Objetivo
 Implementar motor de descubrimiento multicapa (mDNS + SSDP + NetBIOS + HTTP fingerprinting)
