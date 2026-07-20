@@ -1,139 +1,294 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Layout para la herramienta Speed Test (LibreSpeed nativo) -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#0D1117"
-    android:padding="24dp">
+    android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:gravity="center_horizontal">
+        android:gravity="center_horizontal"
+        android:padding="24dp">
 
-        <!-- Header -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/speedtest_title"
-            android:textColor="#FF00E5FF"
-            android:textSize="22sp"
-            android:textStyle="bold"
-            android:fontFamily="sans-serif-medium"
-            android:layout_marginBottom="8dp" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Mide la velocidad de tu conexión"
-            android:textColor="#FF8B949E"
-            android:textSize="13sp"
-            android:layout_marginBottom="24dp" />
-
-        <!-- Description -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Descarga archivos de prueba desde CDNs públicas para medir la velocidad real de tu conexión."
-            android:textColor="#FF8B949E"
-            android:textSize="13sp"
-            android:gravity="center"
-            android:layout_marginBottom="20dp" />
-
-        <!-- Start button -->
-        <TextView
-            android:id="@+id/btnStartSpeedtest"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/speedtest_start"
-            android:textColor="#FF0D1117"
-            android:textSize="15sp"
-            android:textStyle="bold"
-            android:fontFamily="sans-serif-medium"
-            android:gravity="center"
-            android:padding="14dp"
-            android:background="@drawable/badge_online"
-            android:clickable="true"
-            android:focusable="true"
-            android:layout_marginBottom="16dp" />
-
-        <!-- Progress bar -->
-        <ProgressBar
-            android:id="@+id/speedtestProgress"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="match_parent"
-            android:layout_height="3dp"
-            android:visibility="gone"
-            android:progressTint="#FF00E5FF"
-            android:progressBackgroundTint="#FF21262D"
-            android:layout_marginBottom="4dp" />
-
-        <!-- Phase text -->
-        <TextView
-            android:id="@+id/txtSpeedtestPhase"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textColor="#FF8B949E"
-            android:textSize="12sp"
-            android:visibility="gone"
-            android:layout_marginBottom="24dp" />
-
-        <!-- Results container -->
+        <!-- Etapa 1: test normal bidireccional -->
         <LinearLayout
-            android:id="@+id/speedtestResults"
+            android:id="@+id/speedtestPrimaryScreen"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:visibility="gone"
             android:gravity="center_horizontal">
 
-            <!-- Velocímetro circular estilo Ookla -->
-            <com.thowilabs.wscanner.SpeedometerGauge
-                android:id="@+id/gaugeDownload"
-                android:layout_width="280dp"
-                android:layout_height="280dp"
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/speedtest_title"
+                android:textColor="#FF00E5FF"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:fontFamily="sans-serif-medium"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/speedtest_subtitle"
+                android:textColor="#FF8B949E"
+                android:textSize="13sp"
+                android:gravity="center"
                 android:layout_marginBottom="24dp" />
 
-            <!-- Upload: oculto — requiere servidor que acepte POST -->
-            <LinearLayout
+            <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
+                android:text="@string/speedtest_description"
+                android:textColor="#FF8B949E"
+                android:textSize="13sp"
                 android:gravity="center"
-                android:background="@drawable/card_bg_about"
+                android:layout_marginBottom="20dp" />
+
+            <TextView
+                android:id="@+id/btnStartSpeedtest"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/speedtest_start"
+                android:textColor="#FF0D1117"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:fontFamily="sans-serif-medium"
+                android:gravity="center"
                 android:padding="14dp"
-                android:layout_marginBottom="10dp"
-                android:visibility="gone">
+                android:background="@drawable/badge_online"
+                android:clickable="true"
+                android:focusable="true"
+                android:layout_marginBottom="16dp" />
+
+            <ProgressBar
+                android:id="@+id/speedtestProgress"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="3dp"
+                android:max="100"
+                android:visibility="gone"
+                android:progressTint="#FF00E5FF"
+                android:progressBackgroundTint="#FF21262D"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:id="@+id/txtSpeedtestPhase"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#FF8B949E"
+                android:textSize="12sp"
+                android:gravity="center"
+                android:visibility="gone"
+                android:layout_marginBottom="16dp" />
+
+            <LinearLayout
+                android:id="@+id/speedtestPreflight"
+                android:layout_width="match_parent"
+                android:layout_height="280dp"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:visibility="gone"
+                android:layout_marginBottom="20dp">
+
+                <ProgressBar
+                    android:id="@+id/speedtestLatencySpinner"
+                    style="?android:attr/progressBarStyleLarge"
+                    android:layout_width="72dp"
+                    android:layout_height="72dp"
+                    android:indeterminate="true"
+                    android:indeterminateTint="#FF00E5FF"
+                    android:layout_marginBottom="20dp" />
 
                 <TextView
-                    android:layout_width="0dp"
+                    android:id="@+id/txtSpeedtestPreflightPhase"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/speedtest_upload"
-                    android:textColor="#FF8B949E"
-                    android:textSize="13sp" />
-
-                <TextView
-                    android:id="@+id/txtUploadSpeed"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="—"
-                    android:textColor="#FFD29922"
-                    android:textSize="18sp"
+                    android:text="@string/speedtest_phase_ping"
+                    android:textColor="#FF00E5FF"
+                    android:textSize="16sp"
                     android:textStyle="bold"
-                    android:fontFamily="monospace" />
+                    android:gravity="center"
+                    android:fontFamily="sans-serif-medium" />
 
                 <TextView
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text=" Mbps"
+                    android:text="Ping y jitter"
                     android:textColor="#FF6E7681"
-                    android:textSize="12sp" />
+                    android:textSize="12sp"
+                    android:gravity="center"
+                    android:layout_marginTop="6dp" />
             </LinearLayout>
 
-            <!-- Ping -->
+            <LinearLayout
+                android:id="@+id/speedtestResults"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone"
+                android:gravity="center_horizontal">
+
+                <com.thowilabs.wscanner.SpeedometerGauge
+                    android:id="@+id/gaugeDownload"
+                    android:layout_width="280dp"
+                    android:layout_height="280dp"
+                    android:layout_marginBottom="20dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center"
+                    android:background="@drawable/card_bg_about"
+                    android:padding="14dp"
+                    android:layout_marginBottom="10dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/speedtest_upload"
+                        android:textColor="#FF8B949E"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/txtUploadSpeed"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="—"
+                        android:textColor="#FFD29922"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:fontFamily="monospace" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text=" Mbps"
+                        android:textColor="#FF6E7681"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center"
+                    android:background="@drawable/card_bg_about"
+                    android:padding="14dp"
+                    android:layout_marginBottom="10dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/speedtest_ping"
+                        android:textColor="#FF8B949E"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/txtPingResult"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="—"
+                        android:textColor="#FF3FB950"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:fontFamily="monospace" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text=" ms"
+                        android:textColor="#FF6E7681"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center"
+                    android:background="@drawable/card_bg_about"
+                    android:padding="14dp"
+                    android:layout_marginBottom="20dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/speedtest_jitter"
+                        android:textColor="#FF8B949E"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/txtJitterResult"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="—"
+                        android:textColor="#FF8B949E"
+                        android:textSize="16sp"
+                        android:fontFamily="monospace" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text=" ms"
+                        android:textColor="#FF6E7681"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Etapa 2: descarga convencional de un archivo real -->
+        <LinearLayout
+            android:id="@+id/speedtestRealScreen"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center_horizontal"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/speedtest_real_title"
+                android:textColor="#FF00E5FF"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:fontFamily="sans-serif-medium"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:id="@+id/txtRealDownloadPhase"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/speedtest_real_starting"
+                android:textColor="#FF8B949E"
+                android:textSize="13sp"
+                android:gravity="center"
+                android:layout_marginBottom="18dp" />
+
+            <ProgressBar
+                android:id="@+id/speedtestRealProgress"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="3dp"
+                android:indeterminate="true"
+                android:progressTint="#FF00E5FF"
+                android:indeterminateTint="#FF00E5FF"
+                android:layout_marginBottom="16dp" />
+
+            <com.thowilabs.wscanner.SpeedometerGauge
+                android:id="@+id/gaugeRealDownload"
+                android:layout_width="280dp"
+                android:layout_height="280dp"
+                android:layout_marginBottom="20dp" />
+
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -147,16 +302,16 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="@string/speedtest_ping"
+                    android:text="@string/speedtest_real_download"
                     android:textColor="#FF8B949E"
                     android:textSize="13sp" />
 
                 <TextView
-                    android:id="@+id/txtPingResult"
+                    android:id="@+id/txtRealDownloadSpeed"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="—"
-                    android:textColor="#FF3FB950"
+                    android:textColor="#FF00E5FF"
                     android:textSize="18sp"
                     android:textStyle="bold"
                     android:fontFamily="monospace" />
@@ -164,47 +319,93 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text=" ms"
+                    android:text=" Mbps"
                     android:textColor="#FF6E7681"
                     android:textSize="12sp" />
             </LinearLayout>
 
-            <!-- Jitter -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center"
+                android:orientation="vertical"
                 android:background="@drawable/card_bg_about"
                 android:padding="14dp"
-                android:layout_marginBottom="20dp">
+                android:layout_marginBottom="18dp">
 
                 <TextView
-                    android:layout_width="0dp"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/speedtest_jitter"
+                    android:text="@string/speedtest_normal_summary"
                     android:textColor="#FF8B949E"
-                    android:textSize="13sp" />
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="10dp" />
 
-                <TextView
-                    android:id="@+id/txtJitterResult"
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="—"
-                    android:textColor="#FF8B949E"
-                    android:textSize="16sp"
-                    android:fontFamily="monospace" />
+                    android:orientation="horizontal">
 
-                <TextView
-                    android:layout_width="wrap_content"
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/speedtest_download"
+                        android:textColor="#FF6E7681"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/txtNormalDownloadSummary"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="—"
+                        android:textColor="#FF00E5FF"
+                        android:textSize="14sp"
+                        android:fontFamily="monospace" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text=" ms"
-                    android:textColor="#FF6E7681"
-                    android:textSize="12sp" />
+                    android:orientation="horizontal"
+                    android:layout_marginTop="6dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/speedtest_upload"
+                        android:textColor="#FF6E7681"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/txtNormalUploadSummary"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="—"
+                        android:textColor="#FFD29922"
+                        android:textSize="14sp"
+                        android:fontFamily="monospace" />
+                </LinearLayout>
             </LinearLayout>
 
-            <!-- Share button -->
+            <TextView
+                android:id="@+id/btnRestartSpeedtest"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/speedtest_repeat"
+                android:textColor="#FF0D1117"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:fontFamily="sans-serif-medium"
+                android:gravity="center"
+                android:padding="14dp"
+                android:background="@drawable/badge_online"
+                android:clickable="true"
+                android:focusable="true"
+                android:visibility="gone"
+                android:layout_marginBottom="10dp" />
+
             <TextView
                 android:id="@+id/btnShareSpeedtest"
                 android:layout_width="match_parent"
@@ -218,10 +419,9 @@
                 android:background="@drawable/drawer_item_bg"
                 android:clickable="true"
                 android:focusable="true"
+                android:visibility="gone"
                 android:layout_marginBottom="16dp" />
-
         </LinearLayout>
 
     </LinearLayout>
-
 </ScrollView>

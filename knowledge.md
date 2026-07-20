@@ -4,7 +4,7 @@
 
 Android local-network discovery and diagnostics app. Device discovery is local/offline: no cloud API is required for presence or identity. The engine combines protocol evidence and self-advertised metadata rather than assuming that MAC/OUI will be available on modern Android.
 
-Independent diagnostics such as Speed Test may use Internet access.
+Independent diagnostics such as Speed Test use Internet access. Speed Test now runs a normal bidirectional HTTP measurement first, then switches to a second UI state for a conventional real-file download comparison.
 
 ## Current production sources (18 Java classes)
 
@@ -25,6 +25,7 @@ Core discovery/inventory:
 Other app tools:
 
 - `HapticUtil.java`, `SpeedometerGauge.java`, `SpeedTestTool.java`, `TracerouteTool.java`, `WakeOnLanTool.java`, `ScanHistory.java`.
+- `SpeedTestTool.java`: Cloudflare primary HTTP speed backend, dynamic LibreSpeed public-server fallback, legacy direct-download compatibility, adaptive/ramped multistream download/upload sizing, HTTP latency/jitter, and a second real-file download phase. Provider fallback is internal and does not alter the UI flow.
 
 ## Discovery pipeline
 
@@ -60,6 +61,19 @@ Generic names are penalized. A `Gateway` identity cannot be replaced by an HTTP 
 - A CIDR change clears the inventory to avoid mixing different networks.
 - Stopping monitoring preserves the last completed/verified state.
 - Starting a cycle manually during the monitor delay cancels the pending scheduled callback, preventing overlapping scans.
+
+## Speed Test flow
+
+1. HTTP latency/jitter against the selected normal backend.
+2. Small warm-up transfer to estimate connection capacity.
+3. Adaptive 4-stream download test.
+4. Adaptive 3-stream upload test.
+5. Cloudflare is tried first. On failure, fetch LibreSpeed's public server list, probe candidates with a bounded parallel latency budget, and try up to the three fastest responding servers transparently. If all bidirectional backends fail, use the historical direct-download engine as reduced compatibility.
+6. Switch the UI to the real-download screen.
+7. Download a static test file directly; if the first legacy host fails, try the second without exposing an intermediate error.
+8. Present normal download/upload beside the real-download result.
+
+Leaving the Speed Test view invalidates and interrupts the active worker so late callbacks cannot update a hidden screen. Blocking HTTP calls remain bounded by connection/read timeouts.
 
 ## Build
 

@@ -22,8 +22,10 @@ Escáner e inventario de red local para Android. El descubrimiento de dispositiv
 - **Fusión estable:** una señal genérica posterior no reemplaza una identidad específica de mejor calidad.
 - **Cancelación real:** detener el escaneo invalida la generación activa y evita publicar resultados obsoletos.
 - **Aislamiento entre ciclos:** callbacks tardíos de un escaneo cancelado se descartan y no pueden marcar equipos como vistos dentro del ciclo siguiente.
+- **Speed Test en dos etapas:** primero mide latencia, jitter, descarga multistream y subida contra un backend de prueba con fallback transparente; después cambia a una segunda pantalla y ejecuta una descarga HTTP convencional para contrastar el rendimiento sintético con una transferencia real.
+- **Fallback del Speed Test:** Cloudflare es el backend normal principal. Si falla, WScanner obtiene la lista pública oficial de servidores LibreSpeed, prueba disponibilidad/latencia en paralelo y selecciona silenciosamente hasta tres servidores de respaldo. Si tampoco hay un backend bidireccional disponible, conserva el motor histórico de descarga directa como compatibilidad reducida. La descarga real mantiene dos hosts estáticos y cambia al siguiente silenciosamente si uno no responde.
 
-> La detección de dispositivos es local/offline. Herramientas independientes como Speed Test pueden necesitar Internet porque miden conectividad externa.
+> La detección de dispositivos es local/offline. Herramientas independientes como Speed Test necesitan Internet porque miden conectividad externa.
 
 ## Tecnología
 
@@ -67,7 +69,9 @@ WScanner/
 │   │   ├── NetBiosDiscovery.java      # NBSTAT/NetBIOS
 │   │   ├── VendorResolver.java        # OUI opcional si existe MAC
 │   │   ├── Device.java                # Modelo de dispositivo
-│   │   └── DeviceAdapter.java         # Presentación, filtro y estado online/offline
+│   │   ├── DeviceAdapter.java         # Presentación, filtro y estado online/offline
+│   │   ├── SpeedTestTool.java         # Speed test normal + fallback + descarga real
+│   │   └── SpeedometerGauge.java      # Gauge reutilizable de velocidad
 │   ├── src/main/assets/
 │   │   └── oui_database.json          # Enriquecimiento opcional; no requerido
 │   └── src/test/java/com/thowilabs/wscanner/
@@ -144,7 +148,9 @@ Verificar al menos:
 - comprobar que el gateway no cambia de nombre a software como `lighttpd` por un header HTTP;
 - comprobar que un host con RTSP sin ONVIF no se etiqueta automáticamente como cámara;
 - comprobar equipos con DNS-SD TXT para validar modelo/nombre autoanunciado y equipos Windows/Samba para validar Unit ID/MAC de NBSTAT;
-- validar funcionamiento sin MAC y con caché ARP vacía.
+- validar funcionamiento sin MAC y con caché ARP vacía;
+- ejecutar Speed Test con Internet estable y comprobar las fases de ping/jitter, descarga, subida y transición automática a "Prueba de descarga real";
+- repetir el Speed Test bloqueando temporalmente un backend para comprobar que el fallback ocurre sin romper ni cambiar la UI.
 
 ## Límites conocidos
 

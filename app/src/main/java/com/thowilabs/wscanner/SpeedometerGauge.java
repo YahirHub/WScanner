@@ -105,10 +105,13 @@ public class SpeedometerGauge extends View {
      * Escala automáticamente el máximo si la velocidad lo supera.
      */
     public void setSpeed(double mbps) {
-        targetSpeed = mbps;
+        targetSpeed = Math.max(0, mbps);
 
-        // Auto-escalar
-        while (targetSpeed > maxSpeed * 0.9 && maxSpeed < 1000) {
+        // Reiniciar escala al comenzar un test nuevo y auto-escalar hasta 10 Gbps.
+        if (targetSpeed == 0) {
+            maxSpeed = DEFAULT_MAX_MBPS;
+        }
+        while (targetSpeed > maxSpeed * 0.9 && maxSpeed < 10_000) {
             maxSpeed *= 2;
         }
 

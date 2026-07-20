@@ -20,6 +20,7 @@ Mantener una referencia única del estado técnico vigente de WScanner para pode
 - El inventario persiste entre reescaneos de la misma subred. Solo se limpia automáticamente cuando cambia el CIDR para evitar mezclar redes.
 - Online/offline se decide al finalizar un ciclo completo. Nunca marcar toda la lista offline al empezar un nuevo ciclo.
 - El acceso directo a LAN deberá adaptarse al permiso `ACCESS_LOCAL_NETWORK` antes de migrar a `targetSdk 37`.
+- Speed Test es una herramienta externa al descubrimiento offline: usa Internet, ejecuta primero una medición bidireccional con fallback transparente y luego una descarga real independiente.
 
 # Arquitectura actual
 
@@ -40,8 +41,8 @@ Mantener una referencia única del estado técnico vigente de WScanner para pode
 | `Device.java` | Modelo de inventario |
 | `DeviceAdapter.java` | Lista, filtros, iconografía y estado visual online/offline |
 | `HapticUtil.java` | Feedback háptico |
-| `SpeedometerGauge.java` | Gauge de Speed Test |
-| `SpeedTestTool.java` | Prueba de conectividad externa |
+| `SpeedometerGauge.java` | Gauge reutilizable para test normal y descarga real |
+| `SpeedTestTool.java` | Speed Test bidireccional con fallback y segunda descarga real |
 | `TracerouteTool.java` | Traceroute |
 | `WakeOnLanTool.java` | Wake-on-LAN |
 | `ScanHistory.java` | Historial existente |
@@ -82,6 +83,21 @@ Prioridad base:
 `Local 100 > Gateway 98 > mDNS 90 > WS-Discovery 88 > SSDP 85 > SNMP 82 > NetBIOS 80 > DNS 70 > TLS 65 > HTTP 60 > OUI DB 50 > TCP 30 > Heurística 10`.
 
 Los nombres genéricos se penalizan. Una fuente de mayor prioridad no sustituye automáticamente un nombre específico útil.
+
+
+## Speed Test vigente
+
+```text
+Cloudflare normal → lista pública LibreSpeed → selección de hasta 3 servidores → compatibilidad descarga directa
+  ↓
+latencia + jitter + download multistream + upload multistream
+  ↓
+segunda pantalla
+  ↓
+descarga real: Tele2 → fallback ThinkBroadband
+```
+
+La UI no expone el cambio de proveedor. Si no existe un backend bidireccional disponible, upload queda como no disponible en vez de reportar un `0` ficticio.
 
 # Librerías usadas
 
@@ -133,6 +149,7 @@ En la revisión más reciente se encontró además:
 - puerto RTSP tratado con demasiada certeza como cámara;
 - posible solapamiento de ciclos si el usuario iniciaba manualmente un barrido durante la pausa del monitor.
 - callbacks tardíos de workers cancelados podían mezclarse con el estado visto/no visto del ciclo siguiente.
+- el Speed Test anterior no medía subida realmente: devolvía `0` fijo y solo descargaba un archivo estático.
 
 # Soluciones implementadas
 
@@ -154,11 +171,15 @@ En la revisión más reciente se encontró además:
 - Clasificación RTSP conservadora: solo ONVIF u otra evidencia explícita afirma que el equipo es una cámara.
 - El monitor cancela ciclos programados pendientes al iniciar otro manualmente para impedir solapamientos.
 - Los callbacks del motor se validan contra la generación de escaneo activa antes de publicar resultados o progreso.
-- Tests de lógica crítica ampliados a 28 casos Java validados localmente mediante runner ligero y stubs mínimos Android.
+- Tests de lógica crítica del descubrimiento ampliados a 28 casos Java validados localmente mediante runner ligero y stubs mínimos Android.
+- Speed Test agrega 5 pruebas unitarias de cálculo/selección adaptativa; las comprobaciones matemáticas críticas se validaron además con un runner Java local.
+- Speed Test bidireccional con Cloudflare principal, fallback dinámico mediante la lista pública oficial de LibreSpeed, selección acotada por latencia, compatibilidad histórica, tamaños adaptativos/rampa multistream y segunda pantalla de descarga real.
+- Cancelación por generación e interrupción del worker activo del Speed Test al salir o reiniciar para ignorar callbacks tardíos y reducir solapamientos.
 
 # Pendientes
 
 - Ejecutar el build Android real y `lint` con Android SDK y Gradle disponibles.
+- Validar Speed Test en hardware real contra conexiones lentas/rápidas y comprobar disponibilidad de los backends públicos desde distintas redes.
 - Validar en hardware real el monitor continuo durante múltiples ciclos y conexiones/desconexiones.
 - Probar cámaras ONVIF, impresoras WSD/IPP, Cast/AirPlay, NAS/SMB, routers y switches SNMP.
 - Medir duración total del escaneo y falsos positivos/falsos negativos antes de ajustar más timeouts.

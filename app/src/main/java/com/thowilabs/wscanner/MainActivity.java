@@ -329,6 +329,12 @@ public class MainActivity extends AppCompatActivity
     }
 
     private void hideAllViews() {
+        // Al salir del Speed Test invalidamos la ejecución activa. Esto evita que
+        // un resultado tardío vuelva a tocar una vista que ya está oculta.
+        if (showingSpeedTest && speedTestTool != null) {
+            speedTestTool.cancel();
+        }
+
         showingAbout = false;
         showingDeviceDetail = false;
         showingSpeedTest = false;
@@ -895,68 +901,260 @@ public class MainActivity extends AppCompatActivity
     }
 
     private void setupSpeedTestView() {
+        View primaryScreen = layoutSpeedTest.findViewById(R.id.speedtestPrimaryScreen);
+        View realScreen = layoutSpeedTest.findViewById(R.id.speedtestRealScreen);
         View btnStart = layoutSpeedTest.findViewById(R.id.btnStartSpeedtest);
         ProgressBar progress = layoutSpeedTest.findViewById(R.id.speedtestProgress);
         TextView txtPhase = layoutSpeedTest.findViewById(R.id.txtSpeedtestPhase);
+        View preflight = layoutSpeedTest.findViewById(R.id.speedtestPreflight);
+        TextView txtPreflightPhase = layoutSpeedTest.findViewById(R.id.txtSpeedtestPreflightPhase);
         View results = layoutSpeedTest.findViewById(R.id.speedtestResults);
         SpeedometerGauge gauge = layoutSpeedTest.findViewById(R.id.gaugeDownload);
+        TextView txtUpload = layoutSpeedTest.findViewById(R.id.txtUploadSpeed);
         TextView txtPing = layoutSpeedTest.findViewById(R.id.txtPingResult);
         TextView txtJitter = layoutSpeedTest.findViewById(R.id.txtJitterResult);
+
+        ProgressBar realProgress = layoutSpeedTest.findViewById(R.id.speedtestRealProgress);
+        TextView txtRealPhase = layoutSpeedTest.findViewById(R.id.txtRealDownloadPhase);
+        SpeedometerGauge realGauge = layoutSpeedTest.findViewById(R.id.gaugeRealDownload);
+        TextView txtRealSpeed = layoutSpeedTest.findViewById(R.id.txtRealDownloadSpeed);
+        TextView txtNormalDownSummary = layoutSpeedTest.findViewById(R.id.txtNormalDownloadSummary);
+        TextView txtNormalUpSummary = layoutSpeedTest.findViewById(R.id.txtNormalUploadSummary);
+        View btnRestart = layoutSpeedTest.findViewById(R.id.btnRestartSpeedtest);
         View btnShare = layoutSpeedTest.findViewById(R.id.btnShareSpeedtest);
 
-        // Track final speed for share
+        final double[] finalPing = {0};
+        final double[] finalJitter = {0};
         final double[] finalDown = {0};
+        final double[] finalUp = {0};
+        final double[] finalRealDown = {0};
 
-        // Reset UI state
-        progress.setVisibility(View.GONE);
-        txtPhase.setVisibility(View.GONE);
-        results.setVisibility(View.GONE);
-        btnStart.setVisibility(View.VISIBLE);
-        gauge.setSpeed(0);
+        Runnable resetUi = () -> {
+            primaryScreen.setVisibility(View.VISIBLE);
+            realScreen.setVisibility(View.GONE);
+            btnStart.setVisibility(View.VISIBLE);
+            progress.setVisibility(View.GONE);
+            progress.setProgress(0);
+            txtPhase.setVisibility(View.GONE);
+            preflight.setVisibility(View.GONE);
+            results.setVisibility(View.GONE);
+            gauge.setSpeed(0);
+            txtUpload.setText("—");
+            txtPing.setText("—");
+            txtJitter.setText("—");
 
-        btnStart.setOnClickListener(v -> {
-            HapticUtil.performConfirm(v);
+            realProgress.setVisibility(View.VISIBLE);
+            txtRealPhase.setText(R.string.speedtest_real_starting);
+            realGauge.setSpeed(0);
+            txtRealSpeed.setText("—");
+            txtNormalDownSummary.setText("—");
+            txtNormalUpSummary.setText("—");
+            btnRestart.setVisibility(View.GONE);
+            btnShare.setVisibility(View.GONE);
 
+            finalPing[0] = 0;
+            finalJitter[0] = 0;
+            finalDown[0] = 0;
+            finalUp[0] = 0;
+            finalRealDown[0] = 0;
+        };
+
+        final Runnable[] startTest = new Runnable[1];
+        startTest[0] = () -> {
+            HapticUtil.performConfirm(btnStart);
+            speedTestTool.cancel();
+
+            primaryScreen.setVisibility(View.VISIBLE);
+            realScreen.setVisibility(View.GONE);
             btnStart.setVisibility(View.GONE);
             progress.setVisibility(View.VISIBLE);
+            progress.setProgress(0);
             txtPhase.setVisibility(View.VISIBLE);
-            results.setVisibility(View.VISIBLE);
-            btnShare.setVisibility(View.GONE);
+            txtPhase.setText("Preparando test de velocidad…");
+            txtPreflightPhase.setText("Preparando conexión…");
+            preflight.setVisibility(View.VISIBLE);
+            results.setVisibility(View.GONE);
             gauge.setSpeed(0);
+            txtUpload.setText("—");
+            txtPing.setText("—");
+            txtJitter.setText("—");
+            realGauge.setSpeed(0);
+            txtRealSpeed.setText("—");
+            btnRestart.setVisibility(View.GONE);
+            btnShare.setVisibility(View.GONE);
 
             speedTestTool.runTest(new SpeedTestTool.Callback() {
                 @Override public void onPhase(String phase) {
-                    runOnUiThread(() -> txtPhase.setText(phase));
+                    runOnUiThread(() -> {
+                        txtPhase.setText(phase);
+                        if (preflight.getVisibility() == View.VISIBLE) {
+                            txtPreflightPhase.setText(phase);
+                        }
+                    });
                 }
+
+                @Override public void onLatencyStage() {
+                    runOnUiThread(() -> {
+                        if (primaryScreen.getVisibility() != View.VISIBLE) return;
+                        ViewGroup primaryContainer = (ViewGroup) primaryScreen;
+                        TransitionSet transition = new TransitionSet()
+                                .addTransition(new Fade())
+                                .setDuration(180);
+                        TransitionManager.beginDelayedTransition(primaryContainer, transition);
+                        results.setVisibility(View.GONE);
+                        preflight.setVisibility(View.VISIBLE);
+                        gauge.setSpeed(0);
+                    });
+                }
+
+                @Override public void onTransferStage() {
+                    runOnUiThread(() -> {
+                        if (primaryScreen.getVisibility() != View.VISIBLE) return;
+                        ViewGroup primaryContainer = (ViewGroup) primaryScreen;
+                        TransitionSet transition = new TransitionSet()
+                                .addTransition(new Fade())
+                                .addTransition(new Slide(android.view.Gravity.BOTTOM))
+                                .setDuration(320);
+                        TransitionManager.beginDelayedTransition(primaryContainer, transition);
+                        preflight.setVisibility(View.GONE);
+                        results.setVisibility(View.VISIBLE);
+                        gauge.setSpeed(0);
+                    });
+                }
+
+                @Override public void onUploadStage() {
+                    runOnUiThread(() -> {
+                        gauge.setSpeed(0);
+                        progress.setIndeterminate(true);
+                    });
+                }
+
                 @Override public void onProgress(int percent) {
-                    runOnUiThread(() -> progress.setProgress(percent));
+                    runOnUiThread(() -> {
+                        if (percent >= 70 && progress.isIndeterminate()) {
+                            progress.setIndeterminate(false);
+                        }
+                        if (!progress.isIndeterminate()) progress.setProgress(percent);
+                    });
                 }
+
                 @Override public void onPingResult(double pingMs, double jitterMs) {
+                    finalPing[0] = pingMs;
+                    finalJitter[0] = jitterMs;
                     runOnUiThread(() -> {
                         txtPing.setText(pingMs > 0 ? String.format("%.0f", pingMs) : "—");
                         txtJitter.setText(jitterMs > 0 ? String.format("%.1f", jitterMs) : "—");
                     });
                 }
+
                 @Override public void onDownloadSpeedUpdate(double currentMbps) {
                     runOnUiThread(() -> gauge.setSpeed(currentMbps));
                 }
+
                 @Override public void onDownloadResult(double mbps) {
                     finalDown[0] = mbps;
+                    runOnUiThread(() -> gauge.setSpeed(mbps));
                 }
-                @Override public void onUploadResult(double mbps) {}
-                @Override public void onFinished(double pingMs, double jitterMs, double downMbps, double upMbps) {
+
+                @Override public void onUploadSpeedUpdate(double currentMbps) {
                     runOnUiThread(() -> {
-                        progress.setVisibility(View.GONE);
-                        txtPhase.setVisibility(View.GONE);
-                        btnStart.setVisibility(View.VISIBLE);
-                        btnShare.setVisibility(View.VISIBLE);
-                        txtPing.setText(pingMs > 0 ? String.format("%.0f", pingMs) : "—");
-                        txtJitter.setText(jitterMs > 0 ? String.format("%.1f", jitterMs) : "—");
-                        HapticUtil.performHeavy(btnStart);
+                        gauge.setSpeed(currentMbps);
+                        txtUpload.setText(currentMbps > 0
+                                ? String.format("%.1f", currentMbps) : "—");
                     });
                 }
+
+                @Override public void onUploadResult(double mbps) {
+                    finalUp[0] = mbps;
+                    runOnUiThread(() -> {
+                        progress.setIndeterminate(false);
+                        progress.setProgress(70);
+                        gauge.setSpeed(mbps);
+                        txtUpload.setText(mbps > 0 ? String.format("%.1f", mbps) : "—");
+                    });
+                }
+
+                @Override public void onPrimaryFinished(double pingMs, double jitterMs,
+                                                        double downMbps, double upMbps) {
+                    finalPing[0] = pingMs;
+                    finalJitter[0] = jitterMs;
+                    finalDown[0] = downMbps;
+                    finalUp[0] = upMbps;
+                    runOnUiThread(() -> {
+                        gauge.setSpeed(downMbps);
+                        txtNormalDownSummary.setText(String.format("%.1f Mbps", downMbps));
+                        txtNormalUpSummary.setText(
+                                upMbps > 0 ? String.format("%.1f Mbps", upMbps) : "No disponible");
+                    });
+                }
+
+                @Override public void onRealDownloadStart() {
+                    runOnUiThread(() -> {
+                        ViewGroup root = findViewById(R.id.rootConstraint);
+                        TransitionSet transition = new TransitionSet()
+                                .addTransition(new Fade())
+                                .addTransition(new Slide(android.view.Gravity.END))
+                                .setDuration(280);
+                        TransitionManager.beginDelayedTransition(root, transition);
+
+                        primaryScreen.setVisibility(View.GONE);
+                        realScreen.setVisibility(View.VISIBLE);
+                        realProgress.setVisibility(View.VISIBLE);
+                        txtRealPhase.setText(R.string.speedtest_real_starting);
+                        txtNormalDownSummary.setText(String.format("%.1f Mbps", finalDown[0]));
+                        txtNormalUpSummary.setText(finalUp[0] > 0
+                                ? String.format("%.1f Mbps", finalUp[0]) : "No disponible");
+                    });
+                }
+
+                @Override public void onRealDownloadSpeedUpdate(double currentMbps) {
+                    runOnUiThread(() -> {
+                        txtRealPhase.setText(R.string.speedtest_real_running);
+                        realGauge.setSpeed(currentMbps);
+                        txtRealSpeed.setText(String.format("%.1f", currentMbps));
+                    });
+                }
+
+                @Override public void onRealDownloadResult(double mbps) {
+                    finalRealDown[0] = mbps;
+                    runOnUiThread(() -> {
+                        if (mbps > 0) {
+                            realGauge.setSpeed(mbps);
+                            txtRealSpeed.setText(String.format("%.1f", mbps));
+                        } else {
+                            txtRealSpeed.setText("—");
+                        }
+                    });
+                }
+
+                @Override public void onFinished(double pingMs, double jitterMs,
+                                                 double downMbps, double upMbps,
+                                                 double realDownloadMbps) {
+                    finalPing[0] = pingMs;
+                    finalJitter[0] = jitterMs;
+                    finalDown[0] = downMbps;
+                    finalUp[0] = upMbps;
+                    finalRealDown[0] = realDownloadMbps;
+
+                    runOnUiThread(() -> {
+                        progress.setProgress(100);
+                        realProgress.setVisibility(View.GONE);
+                        txtRealPhase.setText(realDownloadMbps > 0
+                                ? R.string.speedtest_real_done
+                                : R.string.speedtest_real_unavailable);
+                        btnRestart.setVisibility(View.VISIBLE);
+                        btnShare.setVisibility(View.VISIBLE);
+                        HapticUtil.performHeavy(btnRestart);
+                    });
+                }
+
                 @Override public void onError(String message) {
                     runOnUiThread(() -> {
+                        primaryScreen.setVisibility(View.VISIBLE);
+                        realScreen.setVisibility(View.GONE);
+                        preflight.setVisibility(View.GONE);
+                        results.setVisibility(View.GONE);
+                        progress.setIndeterminate(false);
                         progress.setVisibility(View.GONE);
                         txtPhase.setText(message);
                         txtPhase.setVisibility(View.VISIBLE);
@@ -965,12 +1163,25 @@ public class MainActivity extends AppCompatActivity
                     });
                 }
             });
-        });
+        };
+
+        resetUi.run();
+        btnStart.setOnClickListener(v -> startTest[0].run());
+        btnRestart.setOnClickListener(v -> startTest[0].run());
 
         btnShare.setOnClickListener(v -> {
+            String realValue = finalRealDown[0] > 0
+                    ? String.format("%.1f Mbps", finalRealDown[0]) : "No disponible";
+            String uploadValue = finalUp[0] > 0
+                    ? String.format("%.1f Mbps", finalUp[0]) : "No disponible";
             String text = String.format(
-                    "WScanner Speed Test\nDescarga: %.1f Mbps\nPing: %s ms\nJitter: %s ms",
-                    finalDown[0], txtPing.getText(), txtJitter.getText());
+                    "WScanner Speed Test\n" +
+                    "Descarga: %.1f Mbps\n" +
+                    "Subida: %s\n" +
+                    "Ping: %.0f ms\n" +
+                    "Jitter: %.1f ms\n" +
+                    "Descarga real: %s",
+                    finalDown[0], uploadValue, finalPing[0], finalJitter[0], realValue);
             Intent intent = new Intent(Intent.ACTION_SEND);
             intent.setType("text/plain");
             intent.putExtra(Intent.EXTRA_TEXT, text);
@@ -993,6 +1204,9 @@ public class MainActivity extends AppCompatActivity
 
     @Override
     protected void onDestroy() {
+        if (speedTestTool != null) {
+            speedTestTool.cancel();
+        }
         if (activeScanHandler != null) {
             activeScanHandler.removeCallbacksAndMessages(null);
         }
