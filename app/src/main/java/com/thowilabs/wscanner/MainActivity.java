@@ -128,6 +128,20 @@ public class MainActivity extends AppCompatActivity
         navView.setNavigationItemSelectedListener(this);
         navView.setCheckedItem(R.id.nav_scanner);
 
+        // El drawer debe comenzar debajo de la barra de estado. NavigationView
+        // normalmente puede dibujar su header detrás de ella; aplicamos el inset
+        // superior como padding para mantener el banner completamente visible.
+        navView.setOnApplyWindowInsetsListener((view, insets) -> {
+            int statusBarInset = insets.getSystemWindowInsetTop();
+            view.setPadding(
+                    view.getPaddingLeft(),
+                    statusBarInset,
+                    view.getPaddingRight(),
+                    view.getPaddingBottom());
+            return insets;
+        });
+        navView.requestApplyInsets();
+
         // UI references
         btnScan = findViewById(R.id.btnScan);
         progressScan = findViewById(R.id.progressScan);
