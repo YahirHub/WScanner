@@ -1,46 +1,101 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Tema oscuro profesional: estética cyber/network -->
     <style name="Theme.WScanner" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <!-- Colores primarios -->
         <item name="colorPrimary">@color/bg_secondary</item>
         <item name="colorPrimaryVariant">@color/bg_primary</item>
         <item name="colorOnPrimary">@color/text_primary</item>
-
-        <!-- Accent -->
         <item name="colorSecondary">@color/accent_primary</item>
         <item name="colorSecondaryVariant">@color/accent_dark</item>
         <item name="colorOnSecondary">@color/bg_primary</item>
-
-        <!-- Surface / Background -->
         <item name="android:colorBackground">@color/bg_primary</item>
+        <item name="android:windowBackground">@color/bg_primary</item>
         <item name="colorSurface">@color/bg_card</item>
         <item name="colorOnSurface">@color/text_primary</item>
-
-        <!-- Error -->
         <item name="colorError">@color/status_error</item>
         <item name="colorOnError">@color/white</item>
-
-        <!-- Transiciones entre pantallas -->
+        <item name="android:fontFamily">sans</item>
         <item name="android:windowContentTransitions">true</item>
         <item name="android:windowAllowEnterTransitionOverlap">false</item>
         <item name="android:windowAllowReturnTransitionOverlap">false</item>
-
-        <!-- Status bar -->
         <item name="android:statusBarColor">@color/bg_primary</item>
         <item name="android:navigationBarColor">@color/bg_primary</item>
         <item name="android:windowLightStatusBar">false</item>
-
-        <!-- MD3 -->
+        <item name="android:windowLightNavigationBar">false</item>
         <item name="colorControlNormal">@color/text_secondary</item>
         <item name="colorControlActivated">@color/accent_primary</item>
         <item name="android:textColorPrimary">@color/text_primary</item>
         <item name="android:textColorSecondary">@color/text_secondary</item>
+        <item name="materialCardViewStyle">@style/Widget.WScanner.Card</item>
+        <item name="materialButtonStyle">@style/Widget.WScanner.Button.Primary</item>
+        <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.WScanner.Small</item>
+        <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.WScanner.Medium</item>
+    </style>
+
+    <style name="ShapeAppearance.WScanner.Small" parent="ShapeAppearance.MaterialComponents.SmallComponent">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">12dp</item>
+    </style>
+
+    <style name="ShapeAppearance.WScanner.Medium" parent="ShapeAppearance.MaterialComponents.MediumComponent">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">20dp</item>
+    </style>
+
+    <style name="Widget.WScanner.Card" parent="Widget.MaterialComponents.CardView">
+        <item name="cardBackgroundColor">@color/bg_card</item>
+        <item name="cardCornerRadius">20dp</item>
+        <item name="cardElevation">0dp</item>
+        <item name="strokeColor">@color/border_subtle</item>
+        <item name="strokeWidth">1dp</item>
+    </style>
+
+    <style name="Widget.WScanner.Button.Primary" parent="Widget.MaterialComponents.Button">
+        <item name="android:minHeight">52dp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.01</item>
+        <item name="backgroundTint">@color/accent_primary</item>
+        <item name="android:textColor">@color/bg_primary</item>
+        <item name="iconTint">@color/bg_primary</item>
+        <item name="cornerRadius">16dp</item>
+        <item name="rippleColor">@color/accent_light</item>
+        <item name="elevation">0dp</item>
+    </style>
+
+    <style name="Widget.WScanner.Button.Secondary" parent="Widget.MaterialComponents.Button.OutlinedButton">
+        <item name="android:minHeight">48dp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/accent_primary</item>
+        <item name="iconTint">@color/accent_primary</item>
+        <item name="strokeColor">@color/border_focus</item>
+        <item name="strokeWidth">1dp</item>
+        <item name="cornerRadius">15dp</item>
+        <item name="rippleColor">@color/accent_soft</item>
+    </style>
+
+    <style name="TextAppearance.WScanner.Eyebrow" parent="TextAppearance.MaterialComponents.Caption">
+        <item name="android:textColor">@color/text_tertiary</item>
+        <item name="android:textSize">10sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.12</item>
+    </style>
+
+    <style name="TextAppearance.WScanner.Title" parent="TextAppearance.MaterialComponents.Headline6">
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textSize">22sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+
+    <style name="TextAppearance.WScanner.Body" parent="TextAppearance.MaterialComponents.Body2">
+        <item name="android:textColor">@color/text_secondary</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:lineSpacingExtra">3sp</item>
     </style>
 
     <style name="DrawerText" parent="TextAppearance.MaterialComponents.Body1">
         <item name="android:textSize">14sp</item>
         <item name="android:fontFamily">sans-serif-medium</item>
     </style>
-
 </resources>

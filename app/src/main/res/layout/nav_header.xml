@@ -28,7 +28,7 @@
             android:fontFamily="sans-serif-medium"
             android:letterSpacing="0.08"
             android:text="Network Scanner"
-            android:textColor="#FF8B949E"
+            android:textColor="@color/text_secondary"
             android:textSize="12sp" />
 
         <TextView
@@ -36,7 +36,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
             android:text="v1.0 · by Thowilabs"
-            android:textColor="#FF6E7681"
+            android:textColor="@color/text_tertiary"
             android:textSize="11sp" />
 
     </LinearLayout>

@@ -1,38 +1,39 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Fondo oscuro principal -->
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
 
-    <!-- Palette: dark cyber/network -->
-    <color name="bg_primary">#FF0D1117</color>
-    <color name="bg_secondary">#FF161B22</color>
-    <color name="bg_card">#FF1C2333</color>
-    <color name="bg_surface">#FF21262D</color>
+    <!-- Premium dark navy palette -->
+    <color name="bg_primary">#FF070B12</color>
+    <color name="bg_secondary">#FF0B111C</color>
+    <color name="bg_card">#FF101826</color>
+    <color name="bg_surface">#FF162235</color>
+    <color name="bg_elevated">#FF1B2A40</color>
 
-    <!-- Accent: cyan / teal -->
-    <color name="accent_primary">#FF00E5FF</color>
-    <color name="accent_dark">#FF00B8D4</color>
-    <color name="accent_light">#FF18FFFF</color>
+    <color name="accent_primary">#FF42D9FF</color>
+    <color name="accent_dark">#FF00A7D6</color>
+    <color name="accent_light">#FF8DEBFF</color>
+    <color name="accent_soft">#2242D9FF</color>
 
-    <!-- Text -->
-    <color name="text_primary">#FFE6EDF3</color>
-    <color name="text_secondary">#FF8B949E</color>
-    <color name="text_tertiary">#FF6E7681</color>
-    <color name="text_accent">#FF00E5FF</color>
+    <color name="text_primary">#FFF3F7FC</color>
+    <color name="text_secondary">#FFA6B2C2</color>
+    <color name="text_tertiary">#FF68778C</color>
+    <color name="text_accent">#FF42D9FF</color>
 
-    <!-- Status -->
-    <color name="status_online">#FF3FB950</color>
-    <color name="status_warning">#FFD29922</color>
-    <color name="status_error">#FFF85149</color>
+    <color name="status_online">#FF4ADE80</color>
+    <color name="status_warning">#FFF6C453</color>
+    <color name="status_error">#FFFF6B6B</color>
 
-    <!-- Divider -->
-    <color name="divider">#FF30363D</color>
+    <color name="divider">#FF223149</color>
+    <color name="border_subtle">#FF223149</color>
+    <color name="border_focus">#6642D9FF</color>
+    <color name="glass_fill">#D90F1826</color>
+    <color name="scrim_soft">#66000000</color>
 
-    <!-- Legacy compat (keep for existing refs) -->
-    <color name="purple_200">#FF00E5FF</color>
-    <color name="purple_500">#FF161B22</color>
-    <color name="purple_700">#FF0D1117</color>
-    <color name="teal_200">#FF18FFFF</color>
-    <color name="teal_700">#FF00B8D4</color>
+    <!-- Legacy compatibility -->
+    <color name="purple_200">#FF42D9FF</color>
+    <color name="purple_500">#FF0B111C</color>
+    <color name="purple_700">#FF070B12</color>
+    <color name="teal_200">#FF8DEBFF</color>
+    <color name="teal_700">#FF00A7D6</color>
 </resources>

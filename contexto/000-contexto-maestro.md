@@ -2,7 +2,7 @@
 
 # Fecha
 
-2026-07-20
+2026-07-21
 
 # Objetivo
 
@@ -21,6 +21,8 @@ Mantener una referencia única del estado técnico vigente de WScanner para pode
 - Online/offline se decide al finalizar un ciclo completo. Nunca marcar toda la lista offline al empezar un nuevo ciclo.
 - El acceso directo a LAN deberá adaptarse al permiso `ACCESS_LOCAL_NETWORK` antes de migrar a `targetSdk 37`.
 - Speed Test es una herramienta externa al descubrimiento offline: usa Internet, ejecuta primero una medición bidireccional con fallback transparente y luego una descarga real independiente.
+- La UI premium se mantiene sobre Views/XML y Material Components; las microinteracciones usan APIs nativas y no agregan dependencias de animación.
+- Los estados de presión deben poder cancelarse al iniciar un desplazamiento y el shimmer solo puede permanecer activo mientras exista una operación real.
 
 # Arquitectura actual
 
@@ -41,6 +43,8 @@ Mantener una referencia única del estado técnico vigente de WScanner para pode
 | `Device.java` | Modelo de inventario |
 | `DeviceAdapter.java` | Lista, filtros, iconografía y estado visual online/offline |
 | `HapticUtil.java` | Feedback háptico |
+| `PressStateUtil.java` | Estados de presión cancelables y retorno con resorte |
+| `ShimmerTextView.java` | Shimmer de texto limitado a procesos activos |
 | `SpeedometerGauge.java` | Gauge reutilizable para test normal y descarga real |
 | `SpeedTestTool.java` | Speed Test bidireccional con fallback y segunda descarga real |
 | `TracerouteTool.java` | Traceroute |
@@ -115,6 +119,8 @@ Cambios vigentes documentados principalmente en:
 
 - `contexto/008-mejora-deteccion-offline-y-refactor-motor.md`
 - `contexto/009-monitor-continuo-y-descubrimiento-avanzado-offline.md`
+- `contexto/010-speed-test-doble-etapa-y-fallback.md`
+- `contexto/011-redisenio-ui-premium-y-microinteracciones.md`
 
 Código central:
 
@@ -175,6 +181,8 @@ En la revisión más reciente se encontró además:
 - Speed Test agrega 5 pruebas unitarias de cálculo/selección adaptativa; las comprobaciones matemáticas críticas se validaron además con un runner Java local.
 - Speed Test bidireccional con Cloudflare principal, fallback dinámico mediante la lista pública oficial de LibreSpeed, selección acotada por latencia, compatibilidad histórica, tamaños adaptativos/rampa multistream y segunda pantalla de descarga real.
 - Cancelación por generación e interrupción del worker activo del Speed Test al salir o reiniciar para ignorar callbacks tardíos y reducir solapamientos.
+- Interfaz unificada con estilos Material reutilizables, tarjetas XML, estados de presión cancelables, hápticos discretos, transiciones breves y estados de carga/vacío orientativos.
+- Animaciones de RecyclerView limitadas a dispositivos nuevos y reiniciadas al reciclar vistas para conservar estabilidad.
 
 # Pendientes
 
@@ -185,6 +193,7 @@ En la revisión más reciente se encontró además:
 - Medir duración total del escaneo y falsos positivos/falsos negativos antes de ajustar más timeouts.
 - La identificación exacta de marca/modelo/SO no puede garantizarse si el dispositivo no publica esa información y no hay MAC disponible. No inventar fingerprints.
 - Diseñar permiso de red local antes de `targetSdk 37`.
+- Validar la nueva UI premium en teléfonos y tablets reales, incluyendo TalkBack, fuentes grandes, reducción de movimiento y reciclaje intensivo del listado.
 
 # Próximos pasos
 

@@ -25,18 +25,18 @@ public class SpeedometerGauge extends View {
     private static final int   DEFAULT_MAX_MBPS = 100;
 
     // ── Paleta oscura ──
-    private static final int COLOR_BG_ARC     = 0xFF1C2128;
-    private static final int COLOR_INNER_RING = 0xFF161B22;
-    private static final int COLOR_VALUE      = 0xFF00E5FF;
-    private static final int COLOR_LABEL      = 0xFF6E7681;
-    private static final int COLOR_GLOW       = 0x1800E5FF;  // ~9% opaco
+    private static final int COLOR_BG_ARC     = 0xFF162235;
+    private static final int COLOR_INNER_RING = 0xFF101826;
+    private static final int COLOR_VALUE      = 0xFF42D9FF;
+    private static final int COLOR_LABEL      = 0xFF68778C;
+    private static final int COLOR_GLOW       = 0x1842D9FF;  // ~9% opaco
 
     // ── Degradado del arco activo: azul profundo → cian → cian claro ──
     private static final int[] GRADIENT_COLORS = {
-        0xFF0077B6,   // azul marino
-        0xFF00A8D4,   // teal
-        0xFF00E5FF,   // cian brillante
-        0xFF80F0FF    // cian pastel
+        0xFF1B68D1,   // azul marino
+        0xFF00A7D6,   // teal
+        0xFF42D9FF,   // cian brillante
+        0xFF8DEBFF    // cian pastel
     };
     private static final float[] GRADIENT_POSITIONS = {0f, 0.35f, 0.70f, 1f};
 
@@ -120,7 +120,7 @@ public class SpeedometerGauge extends View {
         }
 
         animator = ValueAnimator.ofFloat((float) currentSpeed, (float) targetSpeed);
-        animator.setDuration(400);
+        animator.setDuration(320);
         animator.setInterpolator(new DecelerateInterpolator(1.2f));
         animator.addUpdateListener(a -> {
             currentSpeed = (float) a.getAnimatedValue();

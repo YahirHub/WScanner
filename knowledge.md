@@ -6,7 +6,7 @@ Android local-network discovery and diagnostics app. Device discovery is local/o
 
 Independent diagnostics such as Speed Test use Internet access. Speed Test now runs a normal bidirectional HTTP measurement first, then switches to a second UI state for a conventional real-file download comparison.
 
-## Current production sources (18 Java classes)
+## Current production sources (20 Java classes)
 
 Core discovery/inventory:
 
@@ -19,13 +19,27 @@ Core discovery/inventory:
 - `WsDiscovery.java`: WS-Discovery and ONVIF-oriented probes.
 - `SnmpDiscovery.java`: optional SNMP v2c `public` read of `sysName.0`/`sysDescr.0`.
 - `NetBiosDiscovery.java`: NBSTAT/NetBIOS names plus workgroup and Unit ID/MAC when published.
-- `Device.java`, `DeviceAdapter.java`: device model and presentation.
+- `Device.java`, `DeviceAdapter.java`: device model and XML-backed premium cards with stable IDs, filtering and online/offline presentation.
+- `PressStateUtil.java`: cancellable press-scale feedback that preserves click, long-click and scrolling.
+- `ShimmerTextView.java`: lightweight text shimmer enabled only while a process is active.
 - `VendorResolver.java`: optional embedded OUI enrichment only when a MAC exists.
 
 Other app tools:
 
 - `HapticUtil.java`, `SpeedometerGauge.java`, `SpeedTestTool.java`, `TracerouteTool.java`, `WakeOnLanTool.java`, `ScanHistory.java`.
 - `SpeedTestTool.java`: Cloudflare primary HTTP speed backend, dynamic LibreSpeed public-server fallback, legacy direct-download compatibility, adaptive/ramped multistream download/upload sizing, HTTP latency/jitter, and a second real-file download phase. Provider fallback is internal and does not alter the UI flow.
+
+
+## Premium UI invariants
+
+- Press feedback must be subtle and must return to the neutral state when the finger drags outside or a parent begins scrolling.
+- RecyclerView rows animate only on first discovery; repeated protocol updates never replay entrance animations or leave animators attached to recycled holders.
+- Haptics use platform feedback and respect modern Android behavior; legacy vibration exists only for API 24-25 compatibility.
+- Shimmer is reserved for active scan/speed-test phases and stops when the operation or screen ends.
+- Empty states explain the next action and why the feature is useful instead of presenting an unexplained blank list.
+- Scanner, device detail, Speed Test and About share the same dark-navy palette, rounded surfaces, subtle strokes and cyan accent hierarchy.
+- Tablet layouts keep split-pane behavior and use a compact variant of the network summary.
+- UI assets are local; the sidebar banner is WebP-compressed to reduce APK size and startup decode cost.
 
 ## Discovery pipeline
 

@@ -1,12 +1,21 @@
 package com.thowilabs.wscanner;
 
 import android.animation.ObjectAnimator;
+import android.animation.PropertyValuesHolder;
+import android.Manifest;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.content.SharedPreferences;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
 import android.net.Uri;
+import android.net.wifi.WifiInfo;
+import android.net.wifi.WifiManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -26,6 +35,8 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.appcompat.app.ActionBarDrawerToggle;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.SearchView;
@@ -41,6 +52,7 @@ import androidx.transition.TransitionSet;
 
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.navigation.NavigationView;
+import com.google.android.material.snackbar.Snackbar;
 import com.mikepenz.iconics.IconicsDrawable;
 
 import java.util.ArrayList;
@@ -51,6 +63,7 @@ public class MainActivity extends AppCompatActivity
         implements NavigationView.OnNavigationItemSelectedListener {
 
     private static final String TAG = "WScanner.UI";
+    private static final int WIFI_NAME_PERMISSION_REQUEST = 2042;
 
     private DrawerLayout drawerLayout;
     private NavigationView navView;
@@ -65,6 +78,7 @@ public class MainActivity extends AppCompatActivity
     private TextView txtSubnetValue;
     private TextView txtDeviceCount;
     private TextView txtGatewayValue;
+    private TextView txtWifiName;
     private LinearLayout layoutNetworkInfo;
     // Premium: empty state & placeholders
     private View layoutEmpty;
@@ -95,9 +109,11 @@ public class MainActivity extends AppCompatActivity
 
     // Pulse animation for empty state radar
     private ObjectAnimator emptyPulseAnim;
+    private final ArrayList<ObjectAnimator> placeholderAnimations = new ArrayList<>();
 
     // Scan state
     private boolean isScanning = false;
+    private boolean wifiPermissionHintShown = false;
 
     // Active scan mode (monitoreo continuo)
     private NetworkScanner networkScanner;
@@ -149,6 +165,7 @@ public class MainActivity extends AppCompatActivity
         txtSubnetValue = findViewById(R.id.txtSubnetValue);
         txtDeviceCount = findViewById(R.id.txtDeviceCount);
         txtGatewayValue = findViewById(R.id.txtGatewayValue);
+        txtWifiName = findViewById(R.id.txtWifiName);
         layoutNetworkInfo = (LinearLayout) findViewById(R.id.layoutNetworkInfo);
 
         // Premium: empty state & placeholders
@@ -189,6 +206,12 @@ public class MainActivity extends AppCompatActivity
         adapter = new DeviceAdapter(devices);
         adapter.setOnDeviceClickListener(this::showDeviceDetail);
         rv.setAdapter(adapter);
+        rv.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
+                if (newState == RecyclerView.SCROLL_STATE_DRAGGING) hideKeyboard();
+            }
+        });
 
         // Motor de escaneo y monitor continuo
         networkScanner = new NetworkScanner();
@@ -196,6 +219,7 @@ public class MainActivity extends AppCompatActivity
 
         // Mostrar info de red actual usando el mismo rango real que escanea el motor
         updateNetworkInfo();
+        offerWifiNamePermissionIfNeeded();
 
         // FAB click: stop if scanning, start if idle
         btnScan.setOnClickListener(v -> {
@@ -214,31 +238,25 @@ public class MainActivity extends AppCompatActivity
             if (isScanning) return true;  // already scanning, ignore long-press
             HapticUtil.performHeavy(btnScan);
             toggleActiveScan();
-            Toast.makeText(this,
-                    activeScanMode ? "Modo monitor ACTIVADO" : "Modo monitor DESACTIVADO",
-                    Toast.LENGTH_SHORT).show();
+            Snackbar.make(findViewById(R.id.rootConstraint),
+                            activeScanMode
+                                    ? "Monitor continuo activado"
+                                    : "Monitor continuo desactivado",
+                            Snackbar.LENGTH_SHORT)
+                    .setAnchorView(btnScan)
+                    .show();
             return true;
         });
 
-        // FAB press state animation
-        btnScan.setOnTouchListener((v, event) -> {
-            switch (event.getAction()) {
-                case android.view.MotionEvent.ACTION_DOWN:
-                    v.animate().scaleX(0.88f).scaleY(0.88f).setDuration(100).start();
-                    return false;
-                case android.view.MotionEvent.ACTION_UP:
-                case android.view.MotionEvent.ACTION_CANCEL:
-                    v.animate().scaleX(1f).scaleY(1f).setDuration(150).start();
-                    return false;
-            }
-            return false;
-        });
+        // Estado de presión reutilizable: escala sutil, spring-back y cancelación al arrastrar.
+        PressStateUtil.attach(btnScan, 0.91f);
 
         // Premium: setup FAB rotation animation
         setupFabRotation();
 
         // Premium: setup empty state pulse animation
         setupEmptyPulse();
+        layoutScannerContent.post(() -> animateScreenIn(layoutScannerContent));
 
     }
 
@@ -250,21 +268,142 @@ public class MainActivity extends AppCompatActivity
             if (info != null) {
                 txtSubnetValue.setText(info.cidr);
                 txtGatewayValue.setText(info.gateway != null ? info.gateway : "—");
+                txtWifiName.setText(resolveConnectedNetworkName());
 
                 if (layoutNetworkInfo.getVisibility() != View.VISIBLE) {
                     layoutNetworkInfo.setAlpha(0f);
-                    layoutNetworkInfo.setTranslationY(-20f);
+                    layoutNetworkInfo.setTranslationY(-dp(8));
                     layoutNetworkInfo.setVisibility(View.VISIBLE);
                     layoutNetworkInfo.animate()
                             .alpha(1f)
                             .translationY(0f)
-                            .setDuration(400)
+                            .setDuration(260)
                             .setInterpolator(new DecelerateInterpolator())
                             .start();
                 }
             }
         } catch (Exception e) {
             Log.w(TAG, "No se pudo leer info de red: " + e.getMessage());
+            txtWifiName.setText("Red local");
+        }
+    }
+
+    private String resolveConnectedNetworkName() {
+        try {
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+            Network active = cm != null ? cm.getActiveNetwork() : null;
+            NetworkCapabilities caps = active != null && cm != null
+                    ? cm.getNetworkCapabilities(active)
+                    : null;
+
+            if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {
+                return "Red Ethernet";
+            }
+            if (caps == null || !caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                return "Red local";
+            }
+
+            String ssid = null;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                Object transportInfo = caps.getTransportInfo();
+                if (transportInfo instanceof WifiInfo) {
+                    ssid = ((WifiInfo) transportInfo).getSSID();
+                }
+            }
+
+            if (!isUsableSsid(ssid)) {
+                WifiManager wifi = (WifiManager) getApplicationContext()
+                        .getSystemService(Context.WIFI_SERVICE);
+                if (wifi != null) ssid = wifi.getConnectionInfo().getSSID();
+            }
+
+            if (isUsableSsid(ssid)) {
+                return stripSsidQuotes(ssid);
+            }
+            return "Wi-Fi conectado";
+        } catch (SecurityException e) {
+            return "Wi-Fi conectado";
+        } catch (Exception e) {
+            Log.d(TAG, "SSID no disponible: " + e.getMessage());
+            return "Wi-Fi conectado";
+        }
+    }
+
+    private boolean isUsableSsid(String ssid) {
+        if (ssid == null) return false;
+        String clean = stripSsidQuotes(ssid).trim();
+        return !clean.isEmpty()
+                && !"<unknown ssid>".equalsIgnoreCase(clean)
+                && !"unknown ssid".equalsIgnoreCase(clean)
+                && !"0x".equalsIgnoreCase(clean);
+    }
+
+    private String stripSsidQuotes(String ssid) {
+        if (ssid == null) return "";
+        String value = ssid.trim();
+        if (value.length() >= 2 && value.startsWith("\"") && value.endsWith("\"")) {
+            return value.substring(1, value.length() - 1);
+        }
+        return value;
+    }
+
+    private boolean isWifiConnected() {
+        try {
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+            Network active = cm != null ? cm.getActiveNetwork() : null;
+            NetworkCapabilities caps = active != null && cm != null
+                    ? cm.getNetworkCapabilities(active)
+                    : null;
+            return caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI);
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private boolean hasWifiNamePermission() {
+        String permission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                ? Manifest.permission.NEARBY_WIFI_DEVICES
+                : Manifest.permission.ACCESS_FINE_LOCATION;
+        return ContextCompat.checkSelfPermission(this, permission)
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void offerWifiNamePermissionIfNeeded() {
+        if (wifiPermissionHintShown || !isWifiConnected() || hasWifiNamePermission()) return;
+        wifiPermissionHintShown = true;
+        Snackbar.make(findViewById(R.id.rootConstraint),
+                        "Permite acceso a Wi-Fi para mostrar el nombre de la red",
+                        Snackbar.LENGTH_LONG)
+                .setAnchorView(btnScan)
+                .setAction("PERMITIR", v -> requestWifiNamePermission())
+                .show();
+    }
+
+    private void requestWifiNamePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.NEARBY_WIFI_DEVICES},
+                    WIFI_NAME_PERMISSION_REQUEST);
+        } else {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{
+                            Manifest.permission.ACCESS_COARSE_LOCATION,
+                            Manifest.permission.ACCESS_FINE_LOCATION
+                    },
+                    WIFI_NAME_PERMISSION_REQUEST);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode,
+                                           @NonNull String[] permissions,
+                                           @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == WIFI_NAME_PERMISSION_REQUEST) {
+            updateNetworkInfo();
+            if (hasWifiNamePermission()) {
+                HapticUtil.performSuccess(txtWifiName);
+            }
         }
     }
 
@@ -272,6 +411,7 @@ public class MainActivity extends AppCompatActivity
 
     @Override
     public boolean onNavigationItemSelected(@NonNull MenuItem item) {
+        HapticUtil.performSelection(navView);
         int id = item.getItemId();
 
         if (id == R.id.nav_scanner) {
@@ -295,15 +435,17 @@ public class MainActivity extends AppCompatActivity
         SearchView searchView = (SearchView) searchItem.getActionView();
         if (searchView == null) return;
 
-        searchView.setQueryHint("Buscar por nombre, IP, vendor…");
+        searchView.setQueryHint("Buscar nombre, IP o servicio…");
         searchView.setMaxWidth(Integer.MAX_VALUE);
+        searchView.setBackgroundResource(R.drawable.bg_chip_neutral);
+        searchView.setPadding(dp(8), 0, dp(8), 0);
 
         // Style
         SearchView.SearchAutoComplete autoComplete = searchView.findViewById(
                 androidx.appcompat.R.id.search_src_text);
         if (autoComplete != null) {
             autoComplete.setTextColor(0xFFE6EDF3);
-            autoComplete.setHintTextColor(0xFF6E7681);
+            autoComplete.setHintTextColor(0xFF68778C);
         }
 
         searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
@@ -336,6 +478,7 @@ public class MainActivity extends AppCompatActivity
 
             layoutScannerContent.setVisibility(View.VISIBLE);
             btnScan.setVisibility(View.VISIBLE);
+            animateScreenIn(layoutScannerContent);
 
             navView.setCheckedItem(R.id.nav_scanner);
             invalidateOptionsMenu();
@@ -368,12 +511,13 @@ public class MainActivity extends AppCompatActivity
         TransitionSet set = new TransitionSet()
                 .addTransition(new Slide(android.view.Gravity.END))
                 .addTransition(new Fade())
-                .setDuration(350);
+                .setDuration(240);
         TransitionManager.beginDelayedTransition(root, set);
 
         layoutScannerContent.setVisibility(View.GONE);
         btnScan.setVisibility(View.GONE);
         layoutAbout.setVisibility(View.VISIBLE);
+        animateScreenIn(layoutAbout);
         navView.setCheckedItem(R.id.nav_about);
         invalidateOptionsMenu();
     }
@@ -440,10 +584,13 @@ public class MainActivity extends AppCompatActivity
                         ipIndex.put(device.ip, idx);
                         adapter.notifyItemInserted(idx);
                         txtDeviceCount.setText(String.valueOf(devices.size()));
+                        pulseValue(txtDeviceCount);
                     }
 
                     if (devices.size() == 1) {
-                        layoutPlaceholders.setVisibility(View.GONE);
+                        progressScan.setIndeterminate(false);
+            stopPlaceholderAnimations();
+            layoutPlaceholders.setVisibility(View.GONE);
                     }
 
                     updateEmptyState();
@@ -453,8 +600,9 @@ public class MainActivity extends AppCompatActivity
             @Override
             public void onProgress(int percent, int scanned, int total) {
                 runOnUiThread(() -> {
+                    if (progressScan.isIndeterminate()) progressScan.setIndeterminate(false);
                     progressScan.setProgress(percent);
-                    txtStatus.setText(String.format("Escaneando… %d/%d  · %d encontrados",
+                    txtStatus.setText(String.format("Analizando red · %d/%d · %d encontrados",
                             scanned, total, devices.size()));
                 });
             }
@@ -477,7 +625,7 @@ public class MainActivity extends AppCompatActivity
                                     + devices.size() + " conocidos");
                         }
                         txtDeviceCount.setText(String.valueOf(devices.size()));
-                        HapticUtil.performHeavy(btnScan);
+                        HapticUtil.performSuccess(btnScan);
                     }
 
                     if (activeScanMode) {
@@ -518,21 +666,23 @@ public class MainActivity extends AppCompatActivity
         if (activeScanMode) {
             btnScan.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFFF85149));
         } else {
-            btnScan.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFF00E5FF));
+            btnScan.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFF42D9FF));
         }
     }
 
     private void setScanning(boolean scanning) {
         isScanning = scanning;
         progressScan.setVisibility(scanning ? View.VISIBLE : View.GONE);
+        setTextShimmer(txtStatus, scanning);
 
         if (scanning) {
             // Transform FAB into red stop button
             btnScan.setImageResource(R.drawable.ic_stop);
             btnScan.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFFF85149));
 
+            progressScan.setIndeterminate(true);
             progressScan.setProgress(0);
-            txtStatus.setText("Iniciando escaneo…");
+            txtStatus.setText("Preparando descubrimiento local…");
             txtDeviceCount.setText("…");
 
             if (devices.isEmpty()) {
@@ -563,6 +713,8 @@ public class MainActivity extends AppCompatActivity
                 emptyPulseAnim.cancel();
             }
 
+            progressScan.setIndeterminate(false);
+            stopPlaceholderAnimations();
             layoutPlaceholders.setVisibility(View.GONE);
         }
 
@@ -582,12 +734,19 @@ public class MainActivity extends AppCompatActivity
         TransitionSet set = new TransitionSet()
                 .addTransition(new Slide(android.view.Gravity.END))
                 .addTransition(new Fade())
-                .setDuration(300);
+                .setDuration(240);
         TransitionManager.beginDelayedTransition(root, set);
 
-        layoutScannerContent.setVisibility(View.GONE);
-        btnScan.setVisibility(View.GONE);
+        boolean inlineDetail = layoutDeviceDetail.getParent() == layoutScannerContent;
+        if (!inlineDetail) {
+            layoutScannerContent.setVisibility(View.GONE);
+            btnScan.setVisibility(View.GONE);
+        } else {
+            layoutScannerContent.setVisibility(View.VISIBLE);
+            btnScan.setVisibility(View.VISIBLE);
+        }
         layoutDeviceDetail.setVisibility(View.VISIBLE);
+        animateScreenIn(layoutDeviceDetail);
         invalidateOptionsMenu();
 
         populateDeviceDetail(device);
@@ -599,8 +758,8 @@ public class MainActivity extends AppCompatActivity
         // Icon
         ImageView iconView = findViewById(R.id.detailIcon);
         int sizePx = (int) (32 * ctx.getResources().getDisplayMetrics().density);
-        IconicsDrawable drawable = new IconicsDrawable(ctx, "cmd_laptop");
-        drawable.setColorList(android.content.res.ColorStateList.valueOf(0xFF00E5FF));
+        IconicsDrawable drawable = new IconicsDrawable(ctx, deviceIconName(d));
+        drawable.setColorList(android.content.res.ColorStateList.valueOf(0xFF42D9FF));
         drawable.setSizeXPx(sizePx);
         drawable.setSizeYPx(sizePx);
         iconView.setImageDrawable(drawable);
@@ -693,10 +852,17 @@ public class MainActivity extends AppCompatActivity
                 String label = svc != null ? port + " (" + svc + ")" : String.valueOf(port);
 
                 TextView portView = new TextView(ctx);
-                portView.setText("🔌  " + label);
-                portView.setTextColor(0xFF00E5FF);
-                portView.setTextSize(13);
-                portView.setPadding(0, 0, 0, (i < d.openPorts.size() - 1) ? 6 : 0);
+                portView.setText(label);
+                portView.setTextColor(0xFF8DEBFF);
+                portView.setTextSize(12);
+                portView.setTypeface(android.graphics.Typeface.MONOSPACE);
+                portView.setBackgroundResource(R.drawable.bg_chip_neutral);
+                portView.setPadding(dp(10), dp(7), dp(10), dp(7));
+                LinearLayout.LayoutParams portParams = new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT);
+                portParams.setMargins(0, 0, 0, i < d.openPorts.size() - 1 ? dp(8) : 0);
+                portView.setLayoutParams(portParams);
                 portsList.addView(portView);
             }
         } else {
@@ -744,6 +910,12 @@ public class MainActivity extends AppCompatActivity
 
         // Button: Ping
         findViewById(R.id.detailBtnPing).setOnClickListener(v -> pingDevice(d.ip));
+
+        PressStateUtil.attach(findViewById(R.id.detailBtnBack));
+        PressStateUtil.attach(findViewById(R.id.detailBtnCopyIp));
+        PressStateUtil.attach(findViewById(R.id.detailBtnCopyMac));
+        PressStateUtil.attach(findViewById(R.id.detailBtnOpenBrowser));
+        PressStateUtil.attach(findViewById(R.id.detailBtnPing));
     }
 
     private void pingDevice(String ip) {
@@ -832,17 +1004,26 @@ public class MainActivity extends AppCompatActivity
         boolean scanning = isScanning;
 
         if (devices.isEmpty() && !scanning) {
+            layoutEmpty.animate().cancel();
             layoutEmpty.setVisibility(View.VISIBLE);
             layoutEmpty.setAlpha(0f);
-            layoutEmpty.animate().alpha(1f).setDuration(300).start();
+            layoutEmpty.setTranslationY(dp(12));
+            layoutEmpty.animate().alpha(1f).translationY(0f).setDuration(260)
+                    .setInterpolator(new DecelerateInterpolator(1.8f)).start();
 
             if (hasScannedBefore) {
                 txtEmptyHint.setVisibility(View.VISIBLE);
             } else {
                 txtEmptyHint.setVisibility(View.GONE);
             }
+            if (emptyPulseAnim != null && !emptyPulseAnim.isRunning()) {
+                emptyPulseAnim.start();
+            }
         } else if (layoutEmpty.getVisibility() == View.VISIBLE) {
-            layoutEmpty.animate().alpha(0f).setDuration(200)
+            if (emptyPulseAnim != null && emptyPulseAnim.isRunning()) {
+                emptyPulseAnim.cancel();
+            }
+            layoutEmpty.animate().alpha(0f).setDuration(180)
                     .withEndAction(() -> layoutEmpty.setVisibility(View.GONE))
                     .start();
         }
@@ -854,8 +1035,11 @@ public class MainActivity extends AppCompatActivity
         View radarBg = findViewById(R.id.imgEmptyRadarBg);
         if (radarBg == null) return;
 
-        emptyPulseAnim = ObjectAnimator.ofFloat(radarBg, "alpha", 0.3f, 0.7f);
-        emptyPulseAnim.setDuration(1500);
+        PropertyValuesHolder alpha = PropertyValuesHolder.ofFloat("alpha", 0.42f, 0.82f);
+        PropertyValuesHolder scaleX = PropertyValuesHolder.ofFloat("scaleX", 0.94f, 1.06f);
+        PropertyValuesHolder scaleY = PropertyValuesHolder.ofFloat("scaleY", 0.94f, 1.06f);
+        emptyPulseAnim = ObjectAnimator.ofPropertyValuesHolder(radarBg, alpha, scaleX, scaleY);
+        emptyPulseAnim.setDuration(1700);
         emptyPulseAnim.setInterpolator(new AccelerateDecelerateInterpolator());
         emptyPulseAnim.setRepeatCount(ObjectAnimator.INFINITE);
         emptyPulseAnim.setRepeatMode(ObjectAnimator.REVERSE);
@@ -864,29 +1048,32 @@ public class MainActivity extends AppCompatActivity
     // ── Placeholder Shimmer ──────────────────────────────────────
 
     private void animatePlaceholders(View layoutPlaceholders) {
+        stopPlaceholderAnimations();
         if (!(layoutPlaceholders instanceof ViewGroup)) return;
         ViewGroup container = (ViewGroup) layoutPlaceholders;
         for (int i = 0; i < container.getChildCount(); i++) {
             View card = container.getChildAt(i);
-            card.setAlpha(0.4f);
-            card.animate()
-                    .alpha(0.7f)
-                    .setDuration(800 + (i * 150))
-                    .setInterpolator(new AccelerateDecelerateInterpolator())
-                    .withEndAction(() -> card.animate()
-                            .alpha(0.4f)
-                            .setDuration(800)
-                            .setInterpolator(new AccelerateDecelerateInterpolator())
-                            .start())
-                    .start();
+            ObjectAnimator shimmer = ObjectAnimator.ofFloat(card, "alpha", 0.42f, 0.82f);
+            shimmer.setDuration(950L + (i * 90L));
+            shimmer.setStartDelay(i * 110L);
+            shimmer.setRepeatCount(ObjectAnimator.INFINITE);
+            shimmer.setRepeatMode(ObjectAnimator.REVERSE);
+            shimmer.setInterpolator(new AccelerateDecelerateInterpolator());
+            shimmer.start();
+            placeholderAnimations.add(shimmer);
         }
+    }
+
+    private void stopPlaceholderAnimations() {
+        for (ObjectAnimator animator : placeholderAnimations) animator.cancel();
+        placeholderAnimations.clear();
     }
 
     // ── FAB Rotation Animation ──────────────────────────────────
 
     private void setupFabRotation() {
         fabRotationAnim = ObjectAnimator.ofFloat(btnScan, "rotation", 0f, 360f);
-        fabRotationAnim.setDuration(3000);
+        fabRotationAnim.setDuration(2600);
         fabRotationAnim.setInterpolator(new LinearInterpolator());
         fabRotationAnim.setRepeatCount(ObjectAnimator.INFINITE);
     }
@@ -902,12 +1089,13 @@ public class MainActivity extends AppCompatActivity
         TransitionSet set = new TransitionSet()
                 .addTransition(new Slide(android.view.Gravity.END))
                 .addTransition(new Fade())
-                .setDuration(350);
+                .setDuration(240);
         TransitionManager.beginDelayedTransition(root, set);
 
         layoutScannerContent.setVisibility(View.GONE);
         btnScan.setVisibility(View.GONE);
         layoutSpeedTest.setVisibility(View.VISIBLE);
+        animateScreenIn(layoutSpeedTest);
         navView.setCheckedItem(R.id.nav_speedtest);
         invalidateOptionsMenu();
 
@@ -937,6 +1125,10 @@ public class MainActivity extends AppCompatActivity
         View btnRestart = layoutSpeedTest.findViewById(R.id.btnRestartSpeedtest);
         View btnShare = layoutSpeedTest.findViewById(R.id.btnShareSpeedtest);
 
+        PressStateUtil.attach(btnStart, 0.975f);
+        PressStateUtil.attach(btnRestart, 0.975f);
+        PressStateUtil.attach(btnShare, 0.975f);
+
         final double[] finalPing = {0};
         final double[] finalJitter = {0};
         final double[] finalDown = {0};
@@ -949,6 +1141,9 @@ public class MainActivity extends AppCompatActivity
             btnStart.setVisibility(View.VISIBLE);
             progress.setVisibility(View.GONE);
             progress.setProgress(0);
+            setTextShimmer(txtPhase, false);
+            setTextShimmer(txtPreflightPhase, false);
+            setTextShimmer(txtRealPhase, false);
             txtPhase.setVisibility(View.GONE);
             preflight.setVisibility(View.GONE);
             results.setVisibility(View.GONE);
@@ -975,7 +1170,6 @@ public class MainActivity extends AppCompatActivity
 
         final Runnable[] startTest = new Runnable[1];
         startTest[0] = () -> {
-            HapticUtil.performConfirm(btnStart);
             speedTestTool.cancel();
 
             primaryScreen.setVisibility(View.VISIBLE);
@@ -985,8 +1179,10 @@ public class MainActivity extends AppCompatActivity
             progress.setProgress(0);
             txtPhase.setVisibility(View.VISIBLE);
             txtPhase.setText("Preparando test de velocidad…");
+            setTextShimmer(txtPhase, true);
             txtPreflightPhase.setText("Preparando conexión…");
             preflight.setVisibility(View.VISIBLE);
+            setTextShimmer(txtPreflightPhase, true);
             results.setVisibility(View.GONE);
             gauge.setSpeed(0);
             txtUpload.setText("—");
@@ -1030,6 +1226,7 @@ public class MainActivity extends AppCompatActivity
                                 .addTransition(new Slide(android.view.Gravity.BOTTOM))
                                 .setDuration(320);
                         TransitionManager.beginDelayedTransition(primaryContainer, transition);
+                        setTextShimmer(txtPreflightPhase, false);
                         preflight.setVisibility(View.GONE);
                         results.setVisibility(View.VISIBLE);
                         gauge.setSpeed(0);
@@ -1115,6 +1312,7 @@ public class MainActivity extends AppCompatActivity
                         realScreen.setVisibility(View.VISIBLE);
                         realProgress.setVisibility(View.VISIBLE);
                         txtRealPhase.setText(R.string.speedtest_real_starting);
+                        setTextShimmer(txtRealPhase, true);
                         txtNormalDownSummary.setText(String.format("%.1f Mbps", finalDown[0]));
                         txtNormalUpSummary.setText(finalUp[0] > 0
                                 ? String.format("%.1f Mbps", finalUp[0]) : "No disponible");
@@ -1156,9 +1354,11 @@ public class MainActivity extends AppCompatActivity
                         txtRealPhase.setText(realDownloadMbps > 0
                                 ? R.string.speedtest_real_done
                                 : R.string.speedtest_real_unavailable);
+                        setTextShimmer(txtPhase, false);
+                        setTextShimmer(txtRealPhase, false);
                         btnRestart.setVisibility(View.VISIBLE);
                         btnShare.setVisibility(View.VISIBLE);
-                        HapticUtil.performHeavy(btnRestart);
+                        HapticUtil.performSuccess(btnRestart);
                     });
                 }
 
@@ -1170,6 +1370,9 @@ public class MainActivity extends AppCompatActivity
                         results.setVisibility(View.GONE);
                         progress.setIndeterminate(false);
                         progress.setVisibility(View.GONE);
+                        setTextShimmer(txtPhase, false);
+                        setTextShimmer(txtPreflightPhase, false);
+                        setTextShimmer(txtRealPhase, false);
                         txtPhase.setText(message);
                         txtPhase.setVisibility(View.VISIBLE);
                         btnStart.setVisibility(View.VISIBLE);
@@ -1180,10 +1383,17 @@ public class MainActivity extends AppCompatActivity
         };
 
         resetUi.run();
-        btnStart.setOnClickListener(v -> startTest[0].run());
-        btnRestart.setOnClickListener(v -> startTest[0].run());
+        btnStart.setOnClickListener(v -> {
+            HapticUtil.performConfirm(v);
+            startTest[0].run();
+        });
+        btnRestart.setOnClickListener(v -> {
+            HapticUtil.performConfirm(v);
+            startTest[0].run();
+        });
 
         btnShare.setOnClickListener(v -> {
+            HapticUtil.performClick(v);
             String realValue = finalRealDown[0] > 0
                     ? String.format("%.1f Mbps", finalRealDown[0]) : "No disponible";
             String uploadValue = finalUp[0] > 0
@@ -1203,6 +1413,14 @@ public class MainActivity extends AppCompatActivity
         });
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (networkScanner != null && txtWifiName != null) {
+            updateNetworkInfo();
+        }
+    }
+
     // ── Back & Destroy ───────────────────────────────────────────
 
     @Override
@@ -1214,6 +1432,66 @@ public class MainActivity extends AppCompatActivity
         } else {
             super.onBackPressed();
         }
+    }
+
+    private String deviceIconName(Device d) {
+        String type = d.deviceType == null ? "" : d.deviceType.toLowerCase();
+        String name = d.name == null ? "" : d.name.toLowerCase();
+        String signals = type + " " + name + " "
+                + String.join(" ", d.serviceNames).toLowerCase();
+        if (signals.contains("router") || signals.contains("gateway")
+                || signals.contains("punto de acceso") || signals.contains("switch")) {
+            return "cmd_router_network";
+        }
+        if (signals.contains("cámara") || signals.contains("camera")
+                || signals.contains("onvif") || signals.contains("video")) return "cmd_camera";
+        if (signals.contains("impresora") || signals.contains("printer")) return "cmd_printer";
+        if (signals.contains("televisión") || signals.contains("android tv")
+                || signals.contains("airplay") || signals.contains("googlecast")) return "cmd_television";
+        if (signals.contains("teléfono") || signals.contains("phone")
+                || signals.contains("android")) return "cmd_cellphone";
+        if (signals.contains("tablet")) return "cmd_tablet_android";
+        if (signals.contains("servidor") || signals.contains("nas")
+                || signals.contains("ssh") || signals.contains("smb")) return "cmd_server";
+        if (signals.contains("iot") || signals.contains("mqtt")
+                || signals.contains("homekit")) return "cmd_chip";
+        return "cmd_laptop";
+    }
+
+    private void animateScreenIn(View view) {
+        if (view == null) return;
+        view.animate().cancel();
+        view.setAlpha(0f);
+        view.setTranslationY(dp(10));
+        view.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setDuration(240L)
+                .setInterpolator(new DecelerateInterpolator(1.8f))
+                .start();
+    }
+
+    private void pulseValue(View view) {
+        if (view == null) return;
+        view.animate().cancel();
+        view.setScaleX(0.86f);
+        view.setScaleY(0.86f);
+        view.animate()
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(220L)
+                .setInterpolator(new android.view.animation.OvershootInterpolator(1.1f))
+                .start();
+    }
+
+    private void setTextShimmer(TextView view, boolean enabled) {
+        if (view instanceof ShimmerTextView) {
+            ((ShimmerTextView) view).setShimmerEnabled(enabled);
+        }
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
     @Override
@@ -1230,6 +1508,8 @@ public class MainActivity extends AppCompatActivity
         if (emptyPulseAnim != null && emptyPulseAnim.isRunning()) {
             emptyPulseAnim.cancel();
         }
+        stopPlaceholderAnimations();
+        setTextShimmer(txtStatus, false);
         super.onDestroy();
     }
 }

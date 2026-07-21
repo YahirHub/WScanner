@@ -29,14 +29,36 @@ public final class HapticUtil {
     /** Feedback de confirmación para acciones importantes (iniciar escaneo). */
     public static void performConfirm(View view) {
         if (view == null) return;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             view.performHapticFeedback(HapticFeedbackConstants.CONFIRM);
         } else {
             vibrateLegacy(view.getContext(), 25);
         }
     }
 
-    /** Feedback más intenso para finalización. */
+    /** Tick breve para selecciones, filtros y cambios de estado. */
+    public static void performSelection(View view) {
+        if (view == null) return;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+        } else {
+            vibrateLegacy(view.getContext(), 10);
+        }
+    }
+
+    /** Confirmación positiva al completar una operación. */
+    public static void performSuccess(View view) {
+        if (view == null) return;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM);
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+        } else {
+            vibrateLegacy(view.getContext(), 22);
+        }
+    }
+
+    /** Feedback más intenso para long-press o atención. */
     public static void performHeavy(View view) {
         if (view == null) return;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/wscanner-banner.webp" alt="Banner de WScanner" width="100%">
+</p>
+
 # WScanner
 
 Escáner e inventario de red local para Android. El descubrimiento de dispositivos funciona dentro de la LAN y no necesita APIs, cuentas, servicios cloud ni consultas a Internet para detectar equipos.
@@ -24,15 +28,34 @@ Escáner e inventario de red local para Android. El descubrimiento de dispositiv
 - **Aislamiento entre ciclos:** callbacks tardíos de un escaneo cancelado se descartan y no pueden marcar equipos como vistos dentro del ciclo siguiente.
 - **Speed Test en dos etapas:** primero mide latencia, jitter, descarga multistream y subida contra un backend de prueba con fallback transparente; después cambia a una segunda pantalla y ejecuta una descarga HTTP convencional para contrastar el rendimiento sintético con una transferencia real.
 - **Fallback del Speed Test:** Cloudflare es el backend normal principal. Si falla, WScanner obtiene la lista pública oficial de servidores LibreSpeed, prueba disponibilidad/latencia en paralelo y selecciona silenciosamente hasta tres servidores de respaldo. Si tampoco hay un backend bidireccional disponible, conserva el motor histórico de descarga directa como compatibilidad reducida. La descarga real mantiene dos hosts estáticos y cambia al siguiente silenciosamente si uno no responde.
+- **Interfaz premium nativa:** tarjetas Material reutilizables, jerarquía visual consistente, estados de presión cancelables, entradas sutiles, feedback háptico, placeholders animados, texto shimmer únicamente durante operaciones activas y estados vacíos que explican el siguiente paso.
+- **Diseño responsive:** la vista de teléfono y los paneles divididos para tablet comparten componentes de resumen, estado y detalle sin duplicar la lógica de interacción.
 
 > La detección de dispositivos es local/offline. Herramientas independientes como Speed Test necesitan Internet porque miden conectividad externa.
+
+## Capturas de pantalla
+
+<table>
+  <tr>
+    <td align="center"><strong>Descubrimiento local</strong></td>
+    <td align="center"><strong>Escaneo activo</strong></td>
+    <td align="center"><strong>Test de velocidad</strong></td>
+    <td align="center"><strong>Descarga real</strong></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/01-descubre-tu-red.webp" alt="Pantalla inicial de descubrimiento de red" width="220"></td>
+    <td><img src="docs/screenshots/02-escaneo-activo.webp" alt="Escaneo activo y dispositivos detectados" width="220"></td>
+    <td><img src="docs/screenshots/03-test-velocidad.webp" alt="Primera etapa del test de velocidad" width="220"></td>
+    <td><img src="docs/screenshots/04-descarga-real.webp" alt="Segunda etapa de descarga real" width="220"></td>
+  </tr>
+</table>
 
 ## Tecnología
 
 | Capa | Tecnología |
 |---|---|
 | Lenguaje | Java 11 |
-| UI | Material Components, RecyclerView, XML Views, Iconics |
+| UI | Material Components, RecyclerView, XML Views, Iconics, microinteracciones nativas |
 | Red | `java.net` + APIs de conectividad de Android |
 | Protocolos | ICMP, TCP, mDNS/DNS-SD, SSDP/UPnP, WS-Discovery/ONVIF, SNMP, DNS, NetBIOS/NBNS, HTTP, TLS, SSH, FTP, RTSP |
 | Build | Gradle KTS, Android Gradle Plugin 9.2.1 |
@@ -46,9 +69,12 @@ El manifiesto declara:
 - `INTERNET`: sockets TCP/UDP y HTTP, incluidos destinos de la red local.
 - `ACCESS_NETWORK_STATE`: consulta de red activa y propiedades de enlace.
 - `ACCESS_WIFI_STATE`: compatibilidad con información WiFi y fallback de IP/gateway.
+- `NEARBY_WIFI_DEVICES`: lectura del nombre de la red Wi-Fi en Android 13 o superior, declarada como uso no relacionado con ubicación.
+- `ACCESS_COARSE_LOCATION` y `ACCESS_FINE_LOCATION` hasta Android 12L: compatibilidad necesaria para que versiones antiguas de Android permitan leer el SSID; WScanner no almacena ni transmite la ubicación.
 - `CHANGE_WIFI_MULTICAST_STATE`: soporte de recepción multicast en dispositivos/versiones donde Android requiere `MulticastLock` para mDNS.
+- `VIBRATE`: feedback háptico de compatibilidad en Android 7.x; en versiones modernas se usan los hápticos del propio sistema.
 
-No solicita ubicación, contactos ni almacenamiento.
+No solicita contactos ni acceso al almacenamiento.
 
 Al migrar a `targetSdk 37` (Android 17) debe implementarse el permiso de red local correspondiente antes de publicar esa actualización.
 
@@ -69,7 +95,10 @@ WScanner/
 │   │   ├── NetBiosDiscovery.java      # NBSTAT/NetBIOS
 │   │   ├── VendorResolver.java        # OUI opcional si existe MAC
 │   │   ├── Device.java                # Modelo de dispositivo
-│   │   ├── DeviceAdapter.java         # Presentación, filtro y estado online/offline
+│   │   ├── DeviceAdapter.java         # Tarjetas, filtro y estado online/offline
+│   │   ├── PressStateUtil.java        # Estado de presión y cancelación por gesto
+│   │   ├── ShimmerTextView.java       # Shimmer reservado a procesos activos
+│   │   ├── HapticUtil.java            # Feedback háptico compatible
 │   │   ├── SpeedTestTool.java         # Speed test normal + fallback + descarga real
 │   │   └── SpeedometerGauge.java      # Gauge reutilizable de velocidad
 │   ├── src/main/assets/
@@ -151,10 +180,17 @@ Verificar al menos:
 - validar funcionamiento sin MAC y con caché ARP vacía;
 - ejecutar Speed Test con Internet estable y comprobar las fases de ping/jitter, descarga, subida y transición automática a "Prueba de descarga real";
 - repetir el Speed Test bloqueando temporalmente un backend para comprobar que el fallback ocurre sin romper ni cambiar la UI.
+- presionar tarjetas y botones, arrastrar el dedo antes de soltar y confirmar que la escala se cancela sin ejecutar una navegación accidental;
+- abrir/cerrar el drawer, la ficha de dispositivo, Acerca de y Speed Test para validar transiciones breves sin parpadeos;
+- probar en un teléfono pequeño y en `sw600dp`/`w840dp` para verificar que tarjetas, textos y métricas no se recorten.
 
 ## Límites conocidos
 
 WScanner puede mejorar mucho la **cobertura de descubrimiento** mediante protocolos locales, pero la identificación exacta de marca/modelo/SO depende de la información que el propio equipo expone. Sin una base de fingerprints mantenida a gran escala, no debe inventarse un modelo que no esté autoanunciado. El objetivo del motor offline es priorizar resultados verificables y explicar de dónde salió cada identidad.
+
+## Compilación automática
+
+El workflow `Build and Release APK` valida las pruebas unitarias y el lint y compila un APK instalable. En solicitudes de cambio conserva el resultado únicamente como artefacto de validación. Cuando los cambios llegan a `main`, calcula automáticamente el siguiente tag semántico de parche (`v1.0.0`, `v1.0.1`, etc.), crea el tag y la Release, y adjunta el APK junto con su checksum SHA-256. Si una ejecución se repite sobre un commit ya etiquetado, reutiliza la misma versión y actualiza los archivos sin duplicar la Release.
 
 ## Licencia
 

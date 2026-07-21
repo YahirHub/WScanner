@@ -1,13 +1,114 @@
-*.iml
-.gradle
-/local.properties
-/.idea/
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+# ============================================================
+# WScanner - Android / Gradle
+# ============================================================
+
+# Gradle caches and generated files
+.gradle/
+**/.gradle/
+build/
+**/build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Local Android SDK configuration
 local.properties
 
-.agents/
-sesion.jsonl
+# Android Studio / IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+.navigation/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Generated Android artifacts
+*.apk
+*.aab
+*.ap_
+*.aar
+*.dex
+*.class
+*.hprof
+
+# Signing keys and private credentials
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+keystore.properties
+signing.properties
+
+# Environment and local secrets
+.env
+.env.*
+!.env.example
+secrets.properties
+
+# Logs, reports and temporary files
+*.log
+logs/
+reports/
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+
+# Test and coverage outputs
+coverage/
+.ec/
+*.ec
+*.exec
+
+# Kotlin / Java generated state
+.kotlin/
+.kotlin_module
+
+# Native build artifacts
+obj/
+libs/*/
+
+# OS metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+desktop.ini
+
+# Editor settings
+.vscode/
+.history/
+
+# Package archives and local release outputs
+*.zip
+*.tar
+*.tar.gz
+*.7z
+release/
+releases/
+artifacts/
+
+# Firebase / Google service files may contain project identifiers.
+# Keep only when intentionally required by the application.
+google-services.json
+
+# Crash reports and profiling captures
+*.trace
+*.prof
+*.profm
+
+# Do NOT ignore these required repository files:
+# gradlew
+# gradlew.bat
+# gradle/wrapper/gradle-wrapper.jar
+# gradle/wrapper/gradle-wrapper.properties
+# .github/workflows/
+# docs/

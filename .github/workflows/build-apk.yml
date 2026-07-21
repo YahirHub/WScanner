@@ -1,0 +1,160 @@
+name: Build and Release APK
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wscanner-build-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Validar, compilar y publicar APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Obtener código y tags
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Calcular versión automática
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CURRENT_TAG="$(git tag --points-at HEAD --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)"
+
+          if [ -n "$CURRENT_TAG" ]; then
+            TAG="$CURRENT_TAG"
+            CREATE_TAG="false"
+          else
+            LATEST_TAG="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)"
+
+            if [ -z "$LATEST_TAG" ]; then
+              TAG="v1.0.0"
+            elif [[ "$LATEST_TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+              MAJOR="${BASH_REMATCH[1]}"
+              MINOR="${BASH_REMATCH[2]}"
+              PATCH="${BASH_REMATCH[3]}"
+              TAG="v${MAJOR}.${MINOR}.$((PATCH + 1))"
+            else
+              echo "No se pudo interpretar el último tag: $LATEST_TAG" >&2
+              exit 1
+            fi
+
+            CREATE_TAG="true"
+          fi
+
+          VERSION_NAME="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "create_tag=$CREATE_TAG" >> "$GITHUB_OUTPUT"
+          echo "Versión seleccionada: $TAG"
+
+      - name: Configurar Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Configurar Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+
+      - name: Preparar Android SDK 36
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          if [ -z "$SDKMANAGER" ]; then
+            SDKMANAGER="${ANDROID_SDK_ROOT:-$ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
+          fi
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Aplicar versión al APK
+        shell: bash
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+        run: |
+          set -euo pipefail
+          VERSION_CODE="$GITHUB_RUN_NUMBER"
+          sed -i -E "s/versionCode = [0-9]+/versionCode = ${VERSION_CODE}/" app/build.gradle.kts
+          sed -i -E "s/versionName = \"[^\"]+\"/versionName = \"${VERSION_NAME}\"/" app/build.gradle.kts
+          grep -E "version(Code|Name)" app/build.gradle.kts
+
+      - name: Dar permisos al wrapper
+        run: chmod +x gradlew
+
+      - name: Ejecutar pruebas, lint y build
+        run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug
+
+      - name: Preparar APK y checksum
+        id: package
+        shell: bash
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          APK_NAME="WScanner-${TAG}.apk"
+          APK_PATH="artifacts/${APK_NAME}"
+          CHECKSUM_PATH="${APK_PATH}.sha256"
+
+          cp app/build/outputs/apk/debug/app-debug.apk "$APK_PATH"
+          sha256sum "$APK_PATH" > "$CHECKSUM_PATH"
+
+          echo "apk_name=$APK_NAME" >> "$GITHUB_OUTPUT"
+          echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
+          echo "checksum_path=$CHECKSUM_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Conservar APK como artefacto
+        uses: actions/upload-artifact@v6
+        with:
+          name: WScanner-${{ steps.version.outputs.tag }}
+          path: |
+            ${{ steps.package.outputs.apk_path }}
+            ${{ steps.package.outputs.checksum_path }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Crear tag y GitHub Release
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          CREATE_TAG: ${{ steps.version.outputs.create_tag }}
+          APK_PATH: ${{ steps.package.outputs.apk_path }}
+          CHECKSUM_PATH: ${{ steps.package.outputs.checksum_path }}
+        run: |
+          set -euo pipefail
+
+          if [ "$CREATE_TAG" = "true" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$TAG" -m "WScanner $TAG"
+            git push origin "$TAG"
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK_PATH" "$CHECKSUM_PATH" --clobber
+          else
+            gh release create "$TAG" \
+              "$APK_PATH" \
+              "$CHECKSUM_PATH" \
+              --title "WScanner $TAG" \
+              --generate-notes \
+              --latest
+          fi

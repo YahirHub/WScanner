@@ -5,8 +5,8 @@
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24"
-    android:tint="#FF00E5FF">
+    android:tint="@color/accent_primary">
     <path
-        android:fillColor="#FF00E5FF"
+        android:fillColor="@color/accent_primary"
         android:pathData="M12,2A10,10 0,0 0,2 12A10,10 0,0 0,12 22A10,10 0,0 0,22 12A10,10 0,0 0,12 2M12,4A8,8 0,0 1,20 12A8,8 0,0 1,12 20A8,8 0,0 1,4 12A8,8 0,0 1,12 4M12,5A7,7 0,0 0,5 12H7A5,5 0,0 1,12 7V5M12,17A5,5 0,0 1,7 12H5A7,7 0,0 0,12 19V17M13,12A1,1 0,0 1,12 13A1,1 0,0 1,11 12A1,1 0,0 1,12 11A1,1 0,0 1,13 12M15,9L13,13H11L9,9H15Z" />
 </vector>

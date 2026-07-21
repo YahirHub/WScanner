@@ -1,14 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.drawerlayout.widget.DrawerLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/drawerLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fitsSystemWindows="true"
-    android:background="@color/bg_primary">
+    android:background="@color/bg_primary"
+    android:fitsSystemWindows="true">
 
-    <!-- Contenido principal -->
     <androidx.coordinatorlayout.widget.CoordinatorLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent">
@@ -18,280 +16,180 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent">
 
-            <!-- Toolbar -->
             <com.google.android.material.appbar.AppBarLayout
                 android:id="@+id/appBar"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:background="@color/bg_secondary"
                 app:elevation="0dp"
-                app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent">
 
-                <androidx.appcompat.widget.Toolbar
+                <com.google.android.material.appbar.MaterialToolbar
                     android:id="@+id/toolbar"
                     android:layout_width="match_parent"
-                    android:layout_height="?attr/actionBarSize"
+                    android:layout_height="68dp"
                     android:background="@color/bg_secondary"
+                    android:paddingEnd="4dp"
+                    app:elevation="0dp"
+                    app:subtitle="Analizador de red local"
+                    app:subtitleTextColor="@color/text_tertiary"
                     app:title="WScanner"
-                    app:titleTextColor="#FF00E5FF"
-                    app:subtitleTextColor="#FF8B949E"
-                    app:elevation="0dp" />
+                    app:titleTextColor="@color/text_primary" />
 
-                <!-- Progress bar integrated under toolbar -->
                 <ProgressBar
                     android:id="@+id/progressScan"
                     style="?android:attr/progressBarStyleHorizontal"
                     android:layout_width="match_parent"
-                    android:layout_height="3dp"
-                    android:visibility="gone"
-                    android:progressTint="#FF00E5FF"
-                    android:progressBackgroundTint="#FF21262D" />
-
+                    android:layout_height="2dp"
+                    android:indeterminateTint="@color/accent_primary"
+                    android:progressBackgroundTint="@color/bg_surface"
+                    android:progressTint="@color/accent_primary"
+                    android:visibility="gone" />
             </com.google.android.material.appbar.AppBarLayout>
 
-            <!-- ═══ Scanner Content (show/hide with about/detail) ═══ -->
-            <androidx.constraintlayout.widget.ConstraintLayout
+            <androidx.coordinatorlayout.widget.CoordinatorLayout
                 android:id="@+id/layoutScannerContent"
                 android:layout_width="0dp"
                 android:layout_height="0dp"
+                android:background="@drawable/bg_screen_glow"
                 android:visibility="visible"
-                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toBottomOf="@id/appBar"
-                app:layout_constraintBottom_toBottomOf="parent">
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/appBar">
 
-                <!-- Header de información de red -->
-                <LinearLayout
-                    android:id="@+id/layoutNetworkInfo"
-                    android:layout_width="0dp"
+                <!-- El resumen y el estado forman parte del mismo desplazamiento que la lista. -->
+                <com.google.android.material.appbar.AppBarLayout
+                    android:id="@+id/scannerHeaderAppBar"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:background="@drawable/gradient_dark"
-                    android:padding="16dp"
-                    android:gravity="center_vertical"
-                    android:visibility="gone"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintTop_toTopOf="parent">
+                    android:background="@android:color/transparent"
+                    app:elevation="0dp"
+                    app:liftOnScroll="false">
 
                     <LinearLayout
-                        android:layout_width="0dp"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:id="@+id/txtSubnet"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:textColor="#FF8B949E"
-                            android:textSize="11sp"
-                            android:letterSpacing="0.06"
-                            android:fontFamily="sans-serif-medium"
-                            android:text="SUBRED" />
-
-                        <TextView
-                            android:id="@+id/txtSubnetValue"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:textColor="#FF00E5FF"
-                            android:textSize="14sp"
-                            android:fontFamily="sans-serif-medium"
-                            android:text="—"
-                            android:layout_marginTop="2dp" />
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
                         android:orientation="vertical"
-                        android:gravity="center">
+                        app:layout_scrollFlags="scroll|enterAlways">
 
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:textColor="#FF8B949E"
-                            android:textSize="11sp"
-                            android:letterSpacing="0.06"
-                            android:fontFamily="sans-serif-medium"
-                            android:text="DISPOSITIVOS" />
+                        <include
+                            layout="@layout/network_summary"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content" />
 
-                        <TextView
-                            android:id="@+id/txtDeviceCount"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:textColor="#FF3FB950"
-                            android:textSize="24sp"
-                            android:textStyle="bold"
-                            android:fontFamily="sans-serif-medium"
-                            android:text="0"
-                            android:layout_marginTop="2dp" />
+                        <include
+                            android:id="@+id/scanStatusInclude"
+                            layout="@layout/scanner_status"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content" />
                     </LinearLayout>
+                </com.google.android.material.appbar.AppBarLayout>
 
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical"
-                        android:gravity="end">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:textColor="#FF8B949E"
-                            android:textSize="11sp"
-                            android:letterSpacing="0.06"
-                            android:fontFamily="sans-serif-medium"
-                            android:text="GATEWAY" />
-
-                        <TextView
-                            android:id="@+id/txtGatewayValue"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:textColor="#FFE6EDF3"
-                            android:textSize="14sp"
-                            android:fontFamily="sans-serif-medium"
-                            android:text="—"
-                            android:layout_marginTop="2dp" />
-                    </LinearLayout>
-
-                </LinearLayout>
-
-                <!-- Separator 1 -->
-                <View
-                    android:id="@+id/divider1"
-                    android:layout_width="0dp"
-                    android:layout_height="1dp"
-                    android:background="@color/divider"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/layoutNetworkInfo" />
-
-                <!-- Status text -->
-                <TextView
-                    android:id="@+id/txtStatus"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:text="Presiona Escanear para buscar dispositivos"
-                    android:textSize="13sp"
-                    android:textColor="#FF6E7681"
-                    android:padding="16dp"
-                    android:gravity="center"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/divider1" />
-
-                <!-- Separator 3 -->
-                <View
-                    android:id="@+id/divider3"
-                    android:layout_width="0dp"
-                    android:layout_height="1dp"
-                    android:background="@color/divider"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/txtStatus" />
-
-                <!-- Device list area -->
                 <FrameLayout
                     android:id="@+id/listContainer"
-                    android:layout_width="0dp"
-                    android:layout_height="0dp"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/divider3"
-                    app:layout_constraintBottom_toBottomOf="parent">
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
                     <androidx.recyclerview.widget.RecyclerView
                         android:id="@+id/listDevices"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:padding="12dp"
+                        android:background="@android:color/transparent"
                         android:clipToPadding="false"
-                        android:background="@color/bg_primary" />
+                        android:nestedScrollingEnabled="true"
+                        android:overScrollMode="never"
+                        android:paddingStart="16dp"
+                        android:paddingTop="6dp"
+                        android:paddingEnd="16dp"
+                        android:paddingBottom="104dp"
+                        android:scrollbars="none" />
 
-                    <!-- Empty state overlay -->
                     <include layout="@layout/empty_state" />
-
-                    <!-- Placeholder cards during scanning -->
                     <include layout="@layout/placeholder_cards" />
-
                 </FrameLayout>
+            </androidx.coordinatorlayout.widget.CoordinatorLayout>
 
-            </androidx.constraintlayout.widget.ConstraintLayout>
-
-            <!-- ═══ Device Detail content (shown on card tap) ═══ -->
             <include
                 android:id="@+id/layoutDeviceDetail"
                 layout="@layout/layout_device_detail"
                 android:layout_width="0dp"
                 android:layout_height="0dp"
                 android:visibility="gone"
-                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toBottomOf="@id/appBar"
-                app:layout_constraintBottom_toBottomOf="parent" />
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/appBar" />
 
-            <!-- ═══ Acerca de content (shown/hidden via nav drawer) ═══ -->
             <ScrollView
                 android:id="@+id/layoutAbout"
                 android:layout_width="0dp"
                 android:layout_height="0dp"
-                android:padding="24dp"
+                android:background="@drawable/bg_screen_glow"
+                android:clipToPadding="false"
+                android:fillViewport="true"
+                android:paddingStart="20dp"
+                android:paddingTop="12dp"
+                android:paddingEnd="20dp"
+                android:paddingBottom="24dp"
                 android:visibility="gone"
-                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@id/appBar"
-                app:layout_constraintBottom_toBottomOf="parent">
+                android:scrollbars="none">
 
                 <include layout="@layout/about_content" />
             </ScrollView>
 
-            <!-- ═══ Speed Test view ═══ -->
             <include
                 android:id="@+id/layoutSpeedTest"
                 layout="@layout/tool_speedtest"
                 android:layout_width="0dp"
                 android:layout_height="0dp"
                 android:visibility="gone"
-                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toBottomOf="@id/appBar"
-                app:layout_constraintBottom_toBottomOf="parent" />
-
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/appBar" />
         </androidx.constraintlayout.widget.ConstraintLayout>
 
-        <!-- FAB de escaneo -->
         <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:id="@+id/btnScan"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="bottom|end"
-            android:layout_margin="24dp"
+            android:layout_margin="22dp"
             android:contentDescription="Escanear red"
-            app:backgroundTint="#FF00E5FF"
-            app:tint="#FF0D1117"
+            app:backgroundTint="@color/accent_primary"
+            app:borderWidth="0dp"
+            app:elevation="10dp"
             app:fabSize="normal"
+            app:hoveredFocusedTranslationZ="4dp"
+            app:maxImageSize="25dp"
+            app:pressedTranslationZ="8dp"
+            app:rippleColor="@color/accent_light"
             app:srcCompat="@drawable/ic_radar"
-            app:elevation="8dp" />
-
+            app:tint="@color/bg_primary" />
     </androidx.coordinatorlayout.widget.CoordinatorLayout>
 
-    <!-- Drawer lateral -->
     <com.google.android.material.navigation.NavigationView
         android:id="@+id/navView"
-        android:layout_width="wrap_content"
+        android:layout_width="304dp"
         android:layout_height="match_parent"
         android:layout_gravity="start"
-        android:fitsSystemWindows="false"
         android:background="@color/bg_secondary"
+        android:fitsSystemWindows="false"
         app:headerLayout="@layout/nav_header"
-        app:menu="@menu/drawer_menu"
-        app:itemTextColor="@color/drawer_text_color"
-        app:itemIconTint="@color/drawer_icon_tint"
         app:itemBackground="@drawable/drawer_item_bg"
-        app:itemTextAppearance="@style/DrawerText" />
-
+        app:itemHorizontalPadding="18dp"
+        app:itemIconPadding="16dp"
+        app:itemIconTint="@color/drawer_icon_tint"
+        app:itemTextAppearance="@style/DrawerText"
+        app:itemTextColor="@color/drawer_text_color"
+        app:itemVerticalPadding="8dp"
+        app:menu="@menu/drawer_menu" />
 </androidx.drawerlayout.widget.DrawerLayout>
