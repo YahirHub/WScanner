@@ -34,6 +34,7 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -143,6 +144,7 @@ public class MainActivity extends AppCompatActivity
         navView = findViewById(R.id.navView);
         navView.setNavigationItemSelectedListener(this);
         navView.setCheckedItem(R.id.nav_scanner);
+        setupBackNavigation();
 
         // El drawer debe comenzar debajo de la barra de estado. NavigationView
         // normalmente puede dibujar su header detrás de ella; aplicamos el inset
@@ -1423,15 +1425,24 @@ public class MainActivity extends AppCompatActivity
 
     // ── Back & Destroy ───────────────────────────────────────────
 
-    @Override
-    public void onBackPressed() {
-        if (drawerLayout.isDrawerOpen(navView)) {
-            drawerLayout.closeDrawer(navView);
-        } else if (showingDeviceDetail || showingAbout || showingSpeedTest) {
-            showScanner();
-        } else {
-            super.onBackPressed();
-        }
+    private void setupBackNavigation() {
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                if (drawerLayout.isDrawerOpen(navView)) {
+                    drawerLayout.closeDrawer(navView);
+                    return;
+                }
+                if (showingDeviceDetail || showingAbout || showingSpeedTest) {
+                    showScanner();
+                    return;
+                }
+
+                // No hay una pantalla interna que cerrar: termina la actividad usando
+                // la navegación moderna compatible con el gesto predictivo.
+                finishAfterTransition();
+            }
+        });
     }
 
     private String deviceIconName(Device d) {

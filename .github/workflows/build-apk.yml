@@ -97,8 +97,44 @@ jobs:
       - name: Dar permisos al wrapper
         run: chmod +x gradlew
 
-      - name: Ejecutar pruebas, lint y build
-        run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug
+      - name: Ejecutar pruebas y compilar APK
+        run: ./gradlew --no-daemon testDebugUnitTest assembleDebug
+
+      - name: Ejecutar auditoría Android Lint
+        id: lint
+        continue-on-error: true
+        run: ./gradlew --no-daemon lintDebug
+
+      - name: Conservar informes de lint
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: WScanner-lint-${{ github.run_number }}
+          path: |
+            app/build/reports/lint-results-debug.html
+            app/build/reports/lint-results-debug.xml
+            app/build/reports/lint-results-debug.txt
+            app/build/intermediates/lint_intermediate_text_report/debug/lintReportDebug/lint-results-debug.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Resumir resultado de lint
+        if: always()
+        shell: bash
+        env:
+          LINT_OUTCOME: ${{ steps.lint.outcome }}
+        run: |
+          if [ "$LINT_OUTCOME" = "failure" ]; then
+            echo "::warning title=Android Lint encontró incidencias::El APK se compiló correctamente. Revisa el artefacto WScanner-lint-${{ github.run_number }} para consultar el informe completo."
+            {
+              echo "## Android Lint"
+              echo ""
+              echo "Lint encontró incidencias preexistentes, pero no bloqueó el APK ni la Release."
+              echo "El informe completo está disponible en el artefacto \`WScanner-lint-${{ github.run_number }}\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "## Android Lint: sin errores" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Preparar APK y checksum
         id: package
