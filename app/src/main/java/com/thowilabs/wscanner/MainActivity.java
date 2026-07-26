@@ -139,7 +139,13 @@ public class MainActivity extends AppCompatActivity
 
         // Toolbar
         Toolbar toolbar = findViewById(R.id.toolbar);
+        toolbar.setTitle("");
+        toolbar.setSubtitle("");
         setSupportActionBar(toolbar);
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().setTitle("");
+            getSupportActionBar().setSubtitle("");
+        }
 
         // Drawer + hamburguesa
         drawerLayout = findViewById(R.id.drawerLayout);

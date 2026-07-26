@@ -29,13 +29,13 @@
                 <com.google.android.material.appbar.MaterialToolbar
                     android:id="@+id/toolbar"
                     android:layout_width="match_parent"
-                    android:layout_height="68dp"
+                    android:layout_height="56dp"
                     android:background="@color/bg_secondary"
                     android:paddingEnd="4dp"
                     app:elevation="0dp"
-                    app:subtitle="Analizador de red local"
+                    app:subtitle=""
                     app:subtitleTextColor="@color/text_tertiary"
-                    app:title="WScanner"
+                    app:title=""
                     app:titleTextColor="@color/text_primary" />
 
                 <ProgressBar

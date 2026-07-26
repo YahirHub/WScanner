@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+    <!-- === Marca WScanner (identidad conservada) === -->
+    <color name="brand_cyan">#FF42D9FF</color>
+    <color name="brand_cyan_dark">#FF00A7D6</color>
+    <color name="brand_cyan_light">#FF8DEBFF</color>
+    <color name="brand_navy_950">#FF070B12</color>
+    <color name="brand_navy_900">#FF0B111C</color>
+    <color name="brand_navy_800">#FF101826</color>
+    <color name="brand_navy_700">#FF162235</color>
+    <color name="brand_navy_600">#FF1B2A40</color>
+
+    <!-- === Roles Material 3 · Dark === -->
+    <color name="md_primary">#FF7DE3FF</color>
+    <color name="md_on_primary">#FF00344A</color>
+    <color name="md_primary_container">#FF004D6B</color>
+    <color name="md_on_primary_container">#FFC6EEFF</color>
+
+    <color name="md_secondary">#FF9CD3E8</color>
+    <color name="md_on_secondary">#FF00344A</color>
+    <color name="md_secondary_container">#FF1F4A5E</color>
+    <color name="md_on_secondary_container">#FFCFECFF</color>
+
+    <color name="md_tertiary">#FFB4C7FF</color>
+    <color name="md_on_tertiary">#FF1B2E60</color>
+    <color name="md_tertiary_container">#FF334578</color>
+    <color name="md_on_tertiary_container">#FFDBE2FF</color>
+
+    <color name="md_error">#FFFFB4AB</color>
+    <color name="md_on_error">#FF690005</color>
+    <color name="md_error_container">#FF93000A</color>
+    <color name="md_on_error_container">#FFFFDAD6</color>
+
+    <color name="md_background">#FF070B12</color>
+    <color name="md_on_background">#FFF3F7FC</color>
+    <color name="md_surface">#FF0B111C</color>
+    <color name="md_on_surface">#FFF3F7FC</color>
+    <color name="md_on_surface_variant">#FFA6B2C2</color>
+
+    <color name="md_surface_container_lowest">#FF05090F</color>
+    <color name="md_surface_container_low">#FF0B111C</color>
+    <color name="md_surface_container">#FF101826</color>
+    <color name="md_surface_container_high">#FF162235</color>
+    <color name="md_surface_container_highest">#FF1B2A40</color>
+
+    <color name="md_outline">#FF445468</color>
+    <color name="md_outline_variant">#FF223149</color>
+    <color name="md_scrim">#FF000000</color>
+    <color name="md_inverse_surface">#FFF3F7FC</color>
+    <color name="md_inverse_on_surface">#FF101826</color>
+    <color name="md_inverse_primary">#FF00668A</color>
+
+    <!-- Status semánticos -->
+    <color name="status_online">#FF4ADE80</color>
+    <color name="status_warning">#FFF6C453</color>
+    <color name="status_error">#FFFF6B6B</color>
+
+    <!-- === Alias de compatibilidad === -->
+    <color name="bg_primary">@color/md_background</color>
+    <color name="bg_secondary">@color/md_surface</color>
+    <color name="bg_card">@color/md_surface_container</color>
+    <color name="bg_surface">@color/md_surface_container_high</color>
+    <color name="bg_elevated">@color/md_surface_container_highest</color>
+    <color name="accent_primary">@color/md_primary</color>
+    <color name="accent_dark">@color/brand_cyan_dark</color>
+    <color name="accent_light">@color/brand_cyan_light</color>
+    <color name="accent_soft">#2242D9FF</color>
+    <color name="text_primary">@color/md_on_surface</color>
+    <color name="text_secondary">@color/md_on_surface_variant</color>
+    <color name="text_tertiary">#FF68778C</color>
+    <color name="text_accent">@color/md_primary</color>
+    <color name="divider">@color/md_outline_variant</color>
+    <color name="border_subtle">@color/md_outline_variant</color>
+    <color name="border_focus">#6642D9FF</color>
+    <color name="glass_fill">#D90F1826</color>
+    <color name="scrim_soft">#66000000</color>
+
+    <color name="purple_200">@color/md_primary</color>
+    <color name="purple_500">@color/md_surface</color>
+    <color name="purple_700">@color/md_background</color>
+    <color name="teal_200">@color/brand_cyan_light</color>
+    <color name="teal_700">@color/brand_cyan_dark</color>
+</resources>
