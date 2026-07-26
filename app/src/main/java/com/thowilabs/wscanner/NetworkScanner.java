@@ -229,6 +229,7 @@ public class NetworkScanner {
                                         dnsName = h2;
                                     }
                                 }
+                                dnsName = sanitizeHostname(dnsName);
 
                                 // Emitir dispositivo básico inmediatamente
                                 String name = DeviceIdentity.classifyBySignals(host, gateway,
@@ -419,6 +420,7 @@ public class NetworkScanner {
                 foundIps.add(ip);
                 Device device = new Device(result.name, ip, "N/A", "Desconocido",
                         "WS-Discovery", result.detail());
+                device.name = sanitizeHostname(device.name);
                 device.deviceType = result.deviceType;
                 device.model = result.model;
                 device.serviceNames.addAll(result.services);
@@ -541,6 +543,7 @@ public class NetworkScanner {
                     Device netbiosDevice = new Device(result.name, ip,
                             result.mac != null ? result.mac : "N/A", vendor,
                             "NetBIOS", result.detail());
+                    netbiosDevice.name = sanitizeHostname(netbiosDevice.name);
                     netbiosDevice.deviceType = "PC / NAS";
                     if (!isCancelled(generation)) callback.onDeviceFound(netbiosDevice);
                 }
@@ -1313,5 +1316,38 @@ public class NetworkScanner {
             return ((value >> 24) & 0xFF) + "." + ((value >> 16) & 0xFF) + "."
                     + ((value >> 8) & 0xFF) + "." + (value & 0xFF);
         }
+    }
+
+    /**
+     * Elimina sufijos DNS locales típicos que aparecen al resolver por hostname
+     * (ej. router doméstico añade ".lan", mDNS ".local", algunos ".home",
+     * ".home.arpa", ".localdomain"). También quita el punto final y sufijos
+     * repetidos como "iPhone.lan.lan".
+     */
+    static String sanitizeHostname(String name) {
+        if (name == null) return null;
+        String cleaned = name.trim();
+        if (cleaned.isEmpty()) return null;
+        // Quitar punto final absoluto ("host.lan." → "host.lan")
+        while (cleaned.endsWith(".")) {
+            cleaned = cleaned.substring(0, cleaned.length() - 1);
+        }
+        String[] suffixes = {
+                ".home.arpa", ".localdomain", ".local", ".lan",
+                ".home", ".fritz.box", ".router", ".gateway", ".modem"
+        };
+        boolean changed = true;
+        while (changed) {
+            changed = false;
+            for (String s : suffixes) {
+                if (cleaned.length() > s.length()
+                        && cleaned.toLowerCase(java.util.Locale.ROOT).endsWith(s)) {
+                    cleaned = cleaned.substring(0, cleaned.length() - s.length());
+                    changed = true;
+                }
+            }
+        }
+        cleaned = cleaned.trim();
+        return cleaned.isEmpty() ? null : cleaned;
     }
 }
