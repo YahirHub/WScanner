@@ -2,6 +2,8 @@ package com.thowilabs.wscanner;
 
 import android.animation.ObjectAnimator;
 import android.animation.PropertyValuesHolder;
+import android.animation.AnimatorSet;
+import android.animation.ValueAnimator;
 import android.Manifest;
 import android.content.ClipData;
 import android.content.ClipboardManager;
@@ -110,7 +112,7 @@ public class MainActivity extends AppCompatActivity
     private SharedPreferences labelPrefs;
 
     // Premium: FAB rotation animation
-    private ObjectAnimator fabRotationAnim;
+    private AnimatorSet fabRotationAnim;
 
     // Pulse animation for empty state radar
     private ObjectAnimator emptyPulseAnim;
@@ -279,9 +281,10 @@ public class MainActivity extends AppCompatActivity
                 return insets;
             });
         }
-        if (btnScan != null) {
+        View fabContainer = findViewById(R.id.btnScanContainer);
+        if (fabContainer != null) {
             final int baseMargin = dp(22);
-            ViewCompat.setOnApplyWindowInsetsListener(btnScan, (v, insets) -> {
+            ViewCompat.setOnApplyWindowInsetsListener(fabContainer, (v, insets) -> {
                 Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars()
                         | WindowInsetsCompat.Type.ime());
                 ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) v.getLayoutParams();
@@ -752,7 +755,8 @@ public class MainActivity extends AppCompatActivity
             if (fabRotationAnim != null && fabRotationAnim.isRunning()) {
                 fabRotationAnim.cancel();
             }
-            btnScan.animate().rotation(0f).setDuration(300)
+            resetFabPulseState();
+            btnScan.animate().scaleX(1f).scaleY(1f).setDuration(220)
                     .setInterpolator(new DecelerateInterpolator())
                     .start();
 
@@ -1122,10 +1126,56 @@ public class MainActivity extends AppCompatActivity
     // ── FAB Rotation Animation ──────────────────────────────────
 
     private void setupFabRotation() {
-        fabRotationAnim = ObjectAnimator.ofFloat(btnScan, "rotation", 0f, 360f);
-        fabRotationAnim.setDuration(2600);
-        fabRotationAnim.setInterpolator(new LinearInterpolator());
-        fabRotationAnim.setRepeatCount(ObjectAnimator.INFINITE);
+        View haloOuter = findViewById(R.id.fabHaloOuter);
+        View haloInner = findViewById(R.id.fabHaloInner);
+
+        // Halo pulsante (dos anillos escalonados que emanan desde el FAB)
+        AnimatorSet outerPulse = buildHaloPulse(haloOuter, 0);
+        AnimatorSet innerPulse = buildHaloPulse(haloInner, 750);
+
+        // Respiración sutil del propio FAB para reforzar el "estoy activo"
+        ObjectAnimator fabBreath = ObjectAnimator.ofPropertyValuesHolder(btnScan,
+                PropertyValuesHolder.ofFloat("scaleX", 1f, 1.06f, 1f),
+                PropertyValuesHolder.ofFloat("scaleY", 1f, 1.06f, 1f));
+        fabBreath.setDuration(1500);
+        fabBreath.setRepeatCount(ValueAnimator.INFINITE);
+        fabBreath.setInterpolator(new AccelerateDecelerateInterpolator());
+
+        fabRotationAnim = new AnimatorSet();
+        fabRotationAnim.playTogether(outerPulse, innerPulse, fabBreath);
+    }
+
+    private AnimatorSet buildHaloPulse(View halo, long startDelay) {
+        if (halo == null) return new AnimatorSet();
+        ObjectAnimator scaleX = ObjectAnimator.ofFloat(halo, "scaleX", 0.85f, 2.1f);
+        ObjectAnimator scaleY = ObjectAnimator.ofFloat(halo, "scaleY", 0.85f, 2.1f);
+        ObjectAnimator alpha = ObjectAnimator.ofFloat(halo, "alpha", 0.55f, 0f);
+        for (ObjectAnimator a : new ObjectAnimator[]{scaleX, scaleY, alpha}) {
+            a.setDuration(1500);
+            a.setRepeatCount(ValueAnimator.INFINITE);
+            a.setInterpolator(new DecelerateInterpolator());
+            a.setStartDelay(startDelay);
+        }
+        AnimatorSet set = new AnimatorSet();
+        set.playTogether(scaleX, scaleY, alpha);
+        return set;
+    }
+
+    private void resetFabPulseState() {
+        View haloOuter = findViewById(R.id.fabHaloOuter);
+        View haloInner = findViewById(R.id.fabHaloInner);
+        for (View v : new View[]{haloOuter, haloInner}) {
+            if (v != null) {
+                v.setAlpha(0f);
+                v.setScaleX(1f);
+                v.setScaleY(1f);
+            }
+        }
+        if (btnScan != null) {
+            btnScan.setScaleX(1f);
+            btnScan.setScaleY(1f);
+            btnScan.setRotation(0f);
+        }
     }
 
     // ── Speed Test ───────────────────────────────────────────────
@@ -1165,6 +1215,7 @@ public class MainActivity extends AppCompatActivity
         TextView txtUpload = layoutSpeedTest.findViewById(R.id.txtUploadSpeed);
         TextView txtPing = layoutSpeedTest.findViewById(R.id.txtPingResult);
         TextView txtJitter = layoutSpeedTest.findViewById(R.id.txtJitterResult);
+        TextView txtDownload = layoutSpeedTest.findViewById(R.id.txtDownloadSpeed);
 
         ProgressBar realProgress = layoutSpeedTest.findViewById(R.id.speedtestRealProgress);
         TextView txtRealPhase = layoutSpeedTest.findViewById(R.id.txtRealDownloadPhase);
@@ -1201,6 +1252,7 @@ public class MainActivity extends AppCompatActivity
             txtUpload.setText("—");
             txtPing.setText("—");
             txtJitter.setText("—");
+            txtDownload.setText("—");
 
             realProgress.setVisibility(View.VISIBLE);
             txtRealPhase.setText(R.string.speedtest_real_starting);
@@ -1238,6 +1290,7 @@ public class MainActivity extends AppCompatActivity
             txtUpload.setText("—");
             txtPing.setText("—");
             txtJitter.setText("—");
+            txtDownload.setText("—");
             realGauge.setSpeed(0);
             txtRealSpeed.setText("—");
             btnRestart.setVisibility(View.GONE);
@@ -1309,12 +1362,19 @@ public class MainActivity extends AppCompatActivity
                 }
 
                 @Override public void onDownloadSpeedUpdate(double currentMbps) {
-                    runOnUiThread(() -> gauge.setSpeed(currentMbps));
+                    runOnUiThread(() -> {
+                        gauge.setSpeed(currentMbps);
+                        txtDownload.setText(currentMbps > 0
+                                ? String.format("%.1f", currentMbps) : "—");
+                    });
                 }
 
                 @Override public void onDownloadResult(double mbps) {
                     finalDown[0] = mbps;
-                    runOnUiThread(() -> gauge.setSpeed(mbps));
+                    runOnUiThread(() -> {
+                        gauge.setSpeed(mbps);
+                        txtDownload.setText(mbps > 0 ? String.format("%.1f", mbps) : "—");
+                    });
                 }
 
                 @Override public void onUploadSpeedUpdate(double currentMbps) {
@@ -1343,6 +1403,8 @@ public class MainActivity extends AppCompatActivity
                     finalUp[0] = upMbps;
                     runOnUiThread(() -> {
                         gauge.setSpeed(downMbps);
+                        txtDownload.setText(downMbps > 0
+                                ? String.format("%.1f", downMbps) : "—");
                         txtNormalDownSummary.setText(String.format("%.1f Mbps", downMbps));
                         txtNormalUpSummary.setText(
                                 upMbps > 0 ? String.format("%.1f Mbps", upMbps) : "No disponible");

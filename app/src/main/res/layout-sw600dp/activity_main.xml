@@ -99,7 +99,7 @@
         </androidx.constraintlayout.widget.ConstraintLayout>
 
         <!-- FAB -->
-        <com.google.android.material.floatingactionbutton.FloatingActionButton android:id="@+id/btnScan" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="bottom|end" android:layout_margin="24dp" android:contentDescription="Escanear red" app:backgroundTint="@color/accent_primary" app:tint="@color/bg_primary" app:fabSize="normal" app:srcCompat="@drawable/ic_radar" app:elevation="10dp" app:rippleColor="@color/accent_light"/>
+        <FrameLayout android:id="@+id/btnScanContainer" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="bottom|end" android:layout_margin="24dp" android:clipChildren="false" android:clipToPadding="false"><View android:id="@+id/fabHaloOuter" android:layout_width="56dp" android:layout_height="56dp" android:layout_gravity="center" android:alpha="0" android:background="@drawable/bg_fab_halo_ring"/><View android:id="@+id/fabHaloInner" android:layout_width="56dp" android:layout_height="56dp" android:layout_gravity="center" android:alpha="0" android:background="@drawable/bg_fab_halo_ring"/><com.google.android.material.floatingactionbutton.FloatingActionButton android:id="@+id/btnScan" android:layout_width="wrap_content" android:layout_height="wrap_content" android:contentDescription="Escanear red" app:backgroundTint="@color/accent_primary" app:tint="@color/bg_primary" app:fabSize="normal" app:srcCompat="@drawable/ic_radar" app:elevation="10dp" app:rippleColor="@color/accent_light"/></FrameLayout>
     </androidx.coordinatorlayout.widget.CoordinatorLayout>
 
     <!-- Drawer -->

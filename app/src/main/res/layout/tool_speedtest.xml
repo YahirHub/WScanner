@@ -3,406 +3,435 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_screen_glow"
+    android:background="?attr/colorSurface"
     android:clipToPadding="false"
     android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center_horizontal"
         android:orientation="vertical"
         android:paddingStart="20dp"
         android:paddingTop="20dp"
         android:paddingEnd="20dp"
         android:paddingBottom="32dp">
 
+        <!-- ========== ETAPA 1: TEST NORMAL ========== -->
         <LinearLayout
             android:id="@+id/speedtestPrimaryScreen"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center_horizontal"
             android:orientation="vertical">
 
+            <!-- Header: eyebrow + título -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:background="@drawable/bg_chip_accent"
                 android:fontFamily="sans-serif-medium"
-                android:paddingStart="11dp"
-                android:paddingTop="5dp"
-                android:paddingEnd="11dp"
-                android:paddingBottom="5dp"
-                android:text="PRUEBA EN DOS ETAPAS"
-                android:textColor="@color/accent_light"
-                android:textSize="9sp"
+                android:letterSpacing="0.14"
+                android:text="DIAGNÓSTICO DE RED"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="11sp"
                 android:textStyle="bold" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
+                android:layout_marginTop="6dp"
                 android:fontFamily="sans-serif-medium"
                 android:text="@string/speedtest_title"
-                android:textColor="@color/text_primary"
-                android:textSize="27sp"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="28sp"
                 android:textStyle="bold" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="7dp"
-                android:gravity="center"
+                android:layout_marginTop="4dp"
                 android:text="@string/speedtest_subtitle"
-                android:textColor="@color/text_secondary"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="14sp" />
 
+            <!-- Dashboard de métricas (visible siempre) -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="20dp"
-                app:cardBackgroundColor="@color/glass_fill"
-                app:cardCornerRadius="22dp"
+                app:cardBackgroundColor="?attr/colorSurfaceContainer"
+                app:cardCornerRadius="24dp"
                 app:cardElevation="0dp"
-                app:strokeColor="@color/border_subtle"
-                app:strokeWidth="1dp">
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center"
-                    android:lineSpacingExtra="3sp"
-                    android:padding="18dp"
-                    android:text="@string/speedtest_description"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="13sp" />
-            </com.google.android.material.card.MaterialCardView>
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnStartSpeedtest"
-                style="@style/Widget.WScanner.Button.Primary"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="18dp"
-                android:text="@string/speedtest_start"
-                app:icon="@drawable/ic_speedtest"
-                app:iconGravity="textStart" />
-
-            <ProgressBar
-                android:id="@+id/speedtestProgress"
-                style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="match_parent"
-                android:layout_height="3dp"
-                android:layout_marginTop="16dp"
-                android:max="100"
-                android:progressBackgroundTint="@color/bg_surface"
-                android:progressTint="@color/accent_primary"
-                android:visibility="gone" />
-
-            <com.thowilabs.wscanner.ShimmerTextView
-                android:id="@+id/txtSpeedtestPhase"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:fontFamily="sans-serif-medium"
-                android:gravity="center"
-                android:textColor="@color/text_secondary"
-                android:textSize="12sp"
-                android:visibility="gone" />
-
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/speedtestPreflight"
-                android:layout_width="match_parent"
-                android:layout_height="280dp"
-                android:layout_marginTop="16dp"
-                android:visibility="gone"
-                app:cardBackgroundColor="@color/glass_fill"
-                app:cardCornerRadius="26dp"
-                app:cardElevation="0dp"
-                app:strokeColor="@color/border_focus"
+                app:strokeColor="?attr/colorOutlineVariant"
                 app:strokeWidth="1dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:gravity="center"
+                    android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="24dp">
+                    android:padding="20dp">
 
-                    <FrameLayout
-                        android:layout_width="104dp"
-                        android:layout_height="104dp">
-
-                        <View
-                            android:layout_width="104dp"
-                            android:layout_height="104dp"
-                            android:background="@drawable/bg_empty_halo" />
-
-                        <ProgressBar
-                            android:id="@+id/speedtestLatencySpinner"
-                            style="?android:attr/progressBarStyleLarge"
-                            android:layout_width="66dp"
-                            android:layout_height="66dp"
-                            android:layout_gravity="center"
-                            android:indeterminate="true"
-                            android:indeterminateTint="@color/accent_primary" />
-                    </FrameLayout>
-
-                    <com.thowilabs.wscanner.ShimmerTextView
-                        android:id="@+id/txtSpeedtestPreflightPhase"
+                    <!-- Fila 1: Descarga (principal) -->
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="18dp"
-                        android:fontFamily="sans-serif-medium"
-                        android:gravity="center"
-                        android:text="@string/speedtest_phase_ping"
-                        android:textColor="@color/accent_primary"
-                        android:textSize="17sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="7dp"
-                        android:gravity="center"
-                        android:text="Buscando la ruta más estable y midiendo latencia"
-                        android:textColor="@color/text_tertiary"
-                        android:textSize="12sp" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <LinearLayout
-                android:id="@+id/speedtestResults"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:gravity="center_horizontal"
-                android:orientation="vertical"
-                android:visibility="gone">
-
-                <com.thowilabs.wscanner.SpeedometerGauge
-                    android:id="@+id/gaugeDownload"
-                    android:layout_width="280dp"
-                    android:layout_height="280dp"
-                    android:layout_marginBottom="14dp" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal">
-
-                    <com.google.android.material.card.MaterialCardView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        app:cardBackgroundColor="@color/bg_card"
-                        app:cardCornerRadius="18dp"
-                        app:cardElevation="0dp"
-                        app:strokeColor="@color/border_subtle"
-                        app:strokeWidth="1dp">
+                        android:orientation="horizontal"
+                        android:gravity="bottom">
 
                         <LinearLayout
-                            android:layout_width="match_parent"
+                            android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:gravity="center"
-                            android:orientation="vertical"
-                            android:padding="14dp">
+                            android:layout_weight="1"
+                            android:orientation="vertical">
 
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
+                                android:letterSpacing="0.12"
+                                android:text="DESCARGA"
+                                android:textColor="?attr/colorOnSurfaceVariant"
+                                android:textSize="10sp"
+                                android:textStyle="bold" />
+
+                            <LinearLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:gravity="bottom"
+                                android:orientation="horizontal">
+
+                                <TextView
+                                    android:id="@+id/txtDownloadSpeed"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:fontFamily="monospace"
+                                    android:text="—"
+                                    android:textColor="?attr/colorPrimary"
+                                    android:textSize="34sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="6dp"
+                                    android:text="Mbps"
+                                    android:textColor="?attr/colorOnSurfaceVariant"
+                                    android:textSize="12sp" />
+                            </LinearLayout>
+                        </LinearLayout>
+
+                        <ImageView
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:layout_gravity="center_vertical"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_speedtest"
+                            app:tint="?attr/colorPrimary" />
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="16dp"
+                        android:layout_marginBottom="16dp"
+                        android:background="?attr/colorOutlineVariant" />
+
+                    <!-- Fila 2: Subida · Ping · Jitter -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:letterSpacing="0.12"
                                 android:text="SUBIDA"
-                                android:textColor="@color/text_tertiary"
-                                android:textSize="9sp"
+                                android:textColor="?attr/colorOnSurfaceVariant"
+                                android:textSize="10sp"
                                 android:textStyle="bold" />
 
                             <TextView
                                 android:id="@+id/txtUploadSpeed"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="5dp"
+                                android:layout_marginTop="4dp"
                                 android:fontFamily="monospace"
                                 android:text="—"
-                                android:textColor="@color/status_warning"
-                                android:textSize="20sp"
+                                android:textColor="?attr/colorOnSurface"
+                                android:textSize="18sp"
                                 android:textStyle="bold" />
 
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="Mbps"
-                                android:textColor="@color/text_tertiary"
+                                android:textColor="?attr/colorOnSurfaceVariant"
                                 android:textSize="10sp" />
                         </LinearLayout>
-                    </com.google.android.material.card.MaterialCardView>
-
-                    <Space
-                        android:layout_width="10dp"
-                        android:layout_height="1dp" />
-
-                    <com.google.android.material.card.MaterialCardView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        app:cardBackgroundColor="@color/bg_card"
-                        app:cardCornerRadius="18dp"
-                        app:cardElevation="0dp"
-                        app:strokeColor="@color/border_subtle"
-                        app:strokeWidth="1dp">
 
                         <LinearLayout
-                            android:layout_width="match_parent"
+                            android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:gravity="center"
-                            android:orientation="vertical"
-                            android:padding="14dp">
+                            android:layout_weight="1"
+                            android:orientation="vertical">
 
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="PING"
-                                android:textColor="@color/text_tertiary"
-                                android:textSize="9sp"
+                                android:letterSpacing="0.12"
+                                android:text="LATENCIA"
+                                android:textColor="?attr/colorOnSurfaceVariant"
+                                android:textSize="10sp"
                                 android:textStyle="bold" />
 
                             <TextView
                                 android:id="@+id/txtPingResult"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="5dp"
+                                android:layout_marginTop="4dp"
                                 android:fontFamily="monospace"
                                 android:text="—"
-                                android:textColor="@color/status_online"
-                                android:textSize="20sp"
+                                android:textColor="?attr/colorOnSurface"
+                                android:textSize="18sp"
                                 android:textStyle="bold" />
 
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="ms"
-                                android:textColor="@color/text_tertiary"
+                                android:textColor="?attr/colorOnSurfaceVariant"
                                 android:textSize="10sp" />
                         </LinearLayout>
-                    </com.google.android.material.card.MaterialCardView>
-
-                    <Space
-                        android:layout_width="10dp"
-                        android:layout_height="1dp" />
-
-                    <com.google.android.material.card.MaterialCardView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        app:cardBackgroundColor="@color/bg_card"
-                        app:cardCornerRadius="18dp"
-                        app:cardElevation="0dp"
-                        app:strokeColor="@color/border_subtle"
-                        app:strokeWidth="1dp">
 
                         <LinearLayout
-                            android:layout_width="match_parent"
+                            android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:gravity="center"
-                            android:orientation="vertical"
-                            android:padding="14dp">
+                            android:layout_weight="1"
+                            android:orientation="vertical">
 
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
+                                android:letterSpacing="0.12"
                                 android:text="JITTER"
-                                android:textColor="@color/text_tertiary"
-                                android:textSize="9sp"
+                                android:textColor="?attr/colorOnSurfaceVariant"
+                                android:textSize="10sp"
                                 android:textStyle="bold" />
 
                             <TextView
                                 android:id="@+id/txtJitterResult"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="5dp"
+                                android:layout_marginTop="4dp"
                                 android:fontFamily="monospace"
                                 android:text="—"
-                                android:textColor="@color/text_secondary"
-                                android:textSize="20sp"
+                                android:textColor="?attr/colorOnSurface"
+                                android:textSize="18sp"
                                 android:textStyle="bold" />
 
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="ms"
-                                android:textColor="@color/text_tertiary"
+                                android:textColor="?attr/colorOnSurfaceVariant"
                                 android:textSize="10sp" />
                         </LinearLayout>
-                    </com.google.android.material.card.MaterialCardView>
+                    </LinearLayout>
                 </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Gauge (visible durante/tras el test) -->
+            <LinearLayout
+                android:id="@+id/speedtestResults"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:gravity="center_horizontal"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <com.thowilabs.wscanner.SpeedometerGauge
+                    android:id="@+id/gaugeDownload"
+                    android:layout_width="260dp"
+                    android:layout_height="260dp" />
             </LinearLayout>
+
+            <!-- Preflight card (latencia previa) -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/speedtestPreflight"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:visibility="gone"
+                app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
+                app:cardCornerRadius="24dp"
+                app:cardElevation="0dp"
+                app:strokeColor="?attr/colorPrimary"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="18dp">
+
+                    <FrameLayout
+                        android:layout_width="56dp"
+                        android:layout_height="56dp">
+
+                        <View
+                            android:layout_width="56dp"
+                            android:layout_height="56dp"
+                            android:background="@drawable/bg_empty_halo" />
+
+                        <ProgressBar
+                            android:id="@+id/speedtestLatencySpinner"
+                            style="?android:attr/progressBarStyleLarge"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:layout_gravity="center"
+                            android:indeterminate="true"
+                            android:indeterminateTint="?attr/colorPrimary" />
+                    </FrameLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="14dp"
+                        android:orientation="vertical">
+
+                        <com.thowilabs.wscanner.ShimmerTextView
+                            android:id="@+id/txtSpeedtestPreflightPhase"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-medium"
+                            android:text="@string/speedtest_phase_ping"
+                            android:textColor="?attr/colorPrimary"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Buscando la ruta más estable y midiendo latencia"
+                            android:textColor="?attr/colorOnSurfaceVariant"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Fase actual (shimmer) -->
+            <com.thowilabs.wscanner.ShimmerTextView
+                android:id="@+id/txtSpeedtestPhase"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:fontFamily="sans-serif-medium"
+                android:gravity="center"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textSize="12sp"
+                android:visibility="gone" />
+
+            <!-- Progreso lineal -->
+            <com.google.android.material.progressindicator.LinearProgressIndicator
+                android:id="@+id/speedtestProgress"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:visibility="gone"
+                app:indicatorColor="?attr/colorPrimary"
+                app:trackColor="?attr/colorSurfaceVariant"
+                app:trackCornerRadius="3dp"
+                app:trackThickness="4dp" />
+
+            <!-- CTA principal -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnStartSpeedtest"
+                style="@style/Widget.WScanner.Button.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:text="@string/speedtest_start"
+                app:icon="@drawable/ic_speedtest"
+                app:iconGravity="textStart" />
         </LinearLayout>
 
+        <!-- ========== ETAPA 2: DESCARGA DIRECTA ========== -->
         <LinearLayout
             android:id="@+id/speedtestRealScreen"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center_horizontal"
             android:orientation="vertical"
             android:visibility="gone">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:background="@drawable/bg_chip_accent"
                 android:fontFamily="sans-serif-medium"
-                android:paddingStart="11dp"
-                android:paddingTop="5dp"
-                android:paddingEnd="11dp"
-                android:paddingBottom="5dp"
-                android:text="ETAPA 2"
-                android:textColor="@color/accent_light"
-                android:textSize="9sp"
+                android:letterSpacing="0.14"
+                android:text="ETAPA 2 · DESCARGA DIRECTA"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="11sp"
                 android:textStyle="bold" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
+                android:layout_marginTop="6dp"
                 android:fontFamily="sans-serif-medium"
                 android:text="@string/speedtest_real_title"
-                android:textColor="@color/text_primary"
-                android:textSize="25sp"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="24sp"
                 android:textStyle="bold" />
 
             <com.thowilabs.wscanner.ShimmerTextView
                 android:id="@+id/txtRealDownloadPhase"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:gravity="center"
+                android:layout_marginTop="6dp"
                 android:text="@string/speedtest_real_starting"
-                android:textColor="@color/text_secondary"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="13sp" />
 
-            <ProgressBar
+            <com.google.android.material.progressindicator.LinearProgressIndicator
                 android:id="@+id/speedtestRealProgress"
-                style="?android:attr/progressBarStyleHorizontal"
                 android:layout_width="match_parent"
-                android:layout_height="3dp"
-                android:layout_marginTop="16dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
                 android:indeterminate="true"
-                android:indeterminateTint="@color/accent_primary"
-                android:progressTint="@color/accent_primary" />
+                app:indicatorColor="?attr/colorPrimary"
+                app:trackColor="?attr/colorSurfaceVariant"
+                app:trackCornerRadius="3dp"
+                app:trackThickness="4dp" />
 
-            <com.thowilabs.wscanner.SpeedometerGauge
-                android:id="@+id/gaugeRealDownload"
-                android:layout_width="280dp"
-                android:layout_height="280dp"
-                android:layout_marginTop="8dp"
-                android:layout_marginBottom="12dp" />
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp">
+
+                <com.thowilabs.wscanner.SpeedometerGauge
+                    android:id="@+id/gaugeRealDownload"
+                    android:layout_width="260dp"
+                    android:layout_height="260dp"
+                    android:layout_gravity="center_horizontal" />
+            </FrameLayout>
 
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                app:cardBackgroundColor="@color/bg_card"
+                android:layout_marginTop="14dp"
+                app:cardBackgroundColor="?attr/colorSurfaceContainer"
                 app:cardCornerRadius="22dp"
                 app:cardElevation="0dp"
-                app:strokeColor="@color/border_subtle"
+                app:strokeColor="?attr/colorOutlineVariant"
                 app:strokeWidth="1dp">
 
                 <LinearLayout
@@ -429,7 +458,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="Velocidad real"
-                            android:textColor="@color/text_secondary"
+                            android:textColor="?attr/colorOnSurfaceVariant"
                             android:textSize="13sp" />
 
                         <TextView
@@ -438,7 +467,7 @@
                             android:layout_height="wrap_content"
                             android:fontFamily="monospace"
                             android:text="—"
-                            android:textColor="@color/accent_primary"
+                            android:textColor="?attr/colorPrimary"
                             android:textSize="21sp"
                             android:textStyle="bold" />
 
@@ -447,7 +476,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginStart="4dp"
                             android:text="Mbps"
-                            android:textColor="@color/text_tertiary"
+                            android:textColor="?attr/colorOnSurfaceVariant"
                             android:textSize="11sp" />
                     </LinearLayout>
 
@@ -455,7 +484,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="1dp"
                         android:layout_marginVertical="14dp"
-                        android:background="@color/divider" />
+                        android:background="?attr/colorOutlineVariant" />
 
                     <TextView
                         style="@style/TextAppearance.WScanner.Eyebrow"
@@ -474,7 +503,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="Descarga"
-                            android:textColor="@color/text_tertiary"
+                            android:textColor="?attr/colorOnSurfaceVariant"
                             android:textSize="12sp" />
 
                         <TextView
@@ -483,7 +512,7 @@
                             android:layout_height="wrap_content"
                             android:fontFamily="monospace"
                             android:text="—"
-                            android:textColor="@color/accent_light"
+                            android:textColor="?attr/colorOnSurface"
                             android:textSize="14sp"
                             android:textStyle="bold" />
                     </LinearLayout>
@@ -499,7 +528,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="Subida"
-                            android:textColor="@color/text_tertiary"
+                            android:textColor="?attr/colorOnSurfaceVariant"
                             android:textSize="12sp" />
 
                         <TextView
@@ -508,7 +537,7 @@
                             android:layout_height="wrap_content"
                             android:fontFamily="monospace"
                             android:text="—"
-                            android:textColor="@color/status_warning"
+                            android:textColor="?attr/colorOnSurface"
                             android:textSize="14sp"
                             android:textStyle="bold" />
                     </LinearLayout>
