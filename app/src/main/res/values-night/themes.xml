@@ -1,100 +1,130 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <style name="Theme.WScanner" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <item name="colorPrimary">@color/bg_secondary</item>
-        <item name="colorPrimaryVariant">@color/bg_primary</item>
-        <item name="colorOnPrimary">@color/text_primary</item>
-        <item name="colorSecondary">@color/accent_primary</item>
-        <item name="colorSecondaryVariant">@color/accent_dark</item>
-        <item name="colorOnSecondary">@color/bg_primary</item>
-        <item name="android:colorBackground">@color/bg_primary</item>
-        <item name="android:windowBackground">@color/bg_primary</item>
-        <item name="colorSurface">@color/bg_card</item>
-        <item name="colorOnSurface">@color/text_primary</item>
-        <item name="colorError">@color/status_error</item>
-        <item name="colorOnError">@color/white</item>
-        <item name="android:fontFamily">sans</item>
-        <item name="android:windowContentTransitions">true</item>
-        <item name="android:windowAllowEnterTransitionOverlap">false</item>
-        <item name="android:windowAllowReturnTransitionOverlap">false</item>
-        <item name="android:statusBarColor">@color/bg_primary</item>
-        <item name="android:navigationBarColor">@color/bg_primary</item>
+
+    <style name="Base.Theme.WScanner" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/md_primary</item>
+        <item name="colorOnPrimary">@color/md_on_primary</item>
+        <item name="colorPrimaryContainer">@color/md_primary_container</item>
+        <item name="colorOnPrimaryContainer">@color/md_on_primary_container</item>
+
+        <item name="colorSecondary">@color/md_secondary</item>
+        <item name="colorOnSecondary">@color/md_on_secondary</item>
+        <item name="colorSecondaryContainer">@color/md_secondary_container</item>
+        <item name="colorOnSecondaryContainer">@color/md_on_secondary_container</item>
+
+        <item name="colorTertiary">@color/md_tertiary</item>
+        <item name="colorOnTertiary">@color/md_on_tertiary</item>
+        <item name="colorTertiaryContainer">@color/md_tertiary_container</item>
+        <item name="colorOnTertiaryContainer">@color/md_on_tertiary_container</item>
+
+        <item name="colorError">@color/md_error</item>
+        <item name="colorOnError">@color/md_on_error</item>
+        <item name="colorErrorContainer">@color/md_error_container</item>
+        <item name="colorOnErrorContainer">@color/md_on_error_container</item>
+
+        <item name="android:colorBackground">@color/md_background</item>
+        <item name="colorOnBackground">@color/md_on_background</item>
+        <item name="colorSurface">@color/md_surface</item>
+        <item name="colorOnSurface">@color/md_on_surface</item>
+        <item name="colorOnSurfaceVariant">@color/md_on_surface_variant</item>
+
+        <item name="colorSurfaceContainerLowest">@color/md_surface_container_lowest</item>
+        <item name="colorSurfaceContainerLow">@color/md_surface_container_low</item>
+        <item name="colorSurfaceContainer">@color/md_surface_container</item>
+        <item name="colorSurfaceContainerHigh">@color/md_surface_container_high</item>
+        <item name="colorSurfaceContainerHighest">@color/md_surface_container_highest</item>
+
+        <item name="colorOutline">@color/md_outline</item>
+        <item name="colorOutlineVariant">@color/md_outline_variant</item>
+        <item name="android:colorBackgroundFloating">@color/md_surface_container</item>
+
+        <item name="android:windowBackground">@color/md_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
-        <item name="colorControlNormal">@color/text_secondary</item>
-        <item name="colorControlActivated">@color/accent_primary</item>
-        <item name="android:textColorPrimary">@color/text_primary</item>
-        <item name="android:textColorSecondary">@color/text_secondary</item>
+        <item name="android:windowContentTransitions">true</item>
+
+        <item name="shapeAppearanceCornerExtraSmall">@style/ShapeAppearance.WScanner.ExtraSmall</item>
+        <item name="shapeAppearanceCornerSmall">@style/ShapeAppearance.WScanner.Small</item>
+        <item name="shapeAppearanceCornerMedium">@style/ShapeAppearance.WScanner.Medium</item>
+        <item name="shapeAppearanceCornerLarge">@style/ShapeAppearance.WScanner.Large</item>
+        <item name="shapeAppearanceCornerExtraLarge">@style/ShapeAppearance.WScanner.ExtraLarge</item>
+
+        <item name="textAppearanceHeadlineMedium">@style/TextAppearance.WScanner.HeadlineMedium</item>
+        <item name="textAppearanceTitleLarge">@style/TextAppearance.WScanner.TitleLarge</item>
+        <item name="textAppearanceTitleMedium">@style/TextAppearance.WScanner.TitleMedium</item>
+        <item name="textAppearanceBodyLarge">@style/TextAppearance.WScanner.BodyLarge</item>
+        <item name="textAppearanceBodyMedium">@style/TextAppearance.WScanner.BodyMedium</item>
+        <item name="textAppearanceLabelLarge">@style/TextAppearance.WScanner.LabelLarge</item>
+        <item name="textAppearanceLabelMedium">@style/TextAppearance.WScanner.LabelMedium</item>
+
         <item name="materialCardViewStyle">@style/Widget.WScanner.Card</item>
-        <item name="materialButtonStyle">@style/Widget.WScanner.Button.Primary</item>
-        <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.WScanner.Small</item>
-        <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.WScanner.Medium</item>
+        <item name="materialButtonStyle">@style/Widget.WScanner.Button.Filled</item>
+        <item name="chipStyle">@style/Widget.WScanner.Chip</item>
+        <item name="floatingActionButtonStyle">@style/Widget.WScanner.Fab</item>
+        <item name="bottomSheetDialogTheme">@style/ThemeOverlay.WScanner.BottomSheet</item>
     </style>
 
-    <style name="ShapeAppearance.WScanner.Small" parent="ShapeAppearance.MaterialComponents.SmallComponent">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">12dp</item>
-    </style>
+    <style name="Theme.WScanner" parent="Base.Theme.WScanner" />
 
-    <style name="ShapeAppearance.WScanner.Medium" parent="ShapeAppearance.MaterialComponents.MediumComponent">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">20dp</item>
-    </style>
-
-    <style name="Widget.WScanner.Card" parent="Widget.MaterialComponents.CardView">
-        <item name="cardBackgroundColor">@color/bg_card</item>
+    <style name="Widget.WScanner.Card" parent="Widget.Material3.CardView.Filled">
+        <item name="cardBackgroundColor">?attr/colorSurfaceContainer</item>
         <item name="cardCornerRadius">20dp</item>
         <item name="cardElevation">0dp</item>
-        <item name="strokeColor">@color/border_subtle</item>
+        <item name="strokeColor">?attr/colorOutlineVariant</item>
         <item name="strokeWidth">1dp</item>
+        <item name="rippleColor">?attr/colorSecondaryContainer</item>
     </style>
 
-    <style name="Widget.WScanner.Button.Primary" parent="Widget.MaterialComponents.Button">
+    <style name="Widget.WScanner.Card.Elevated" parent="Widget.Material3.CardView.Elevated">
+        <item name="cardBackgroundColor">?attr/colorSurfaceContainerHigh</item>
+        <item name="cardCornerRadius">20dp</item>
+        <item name="cardElevation">2dp</item>
+    </style>
+
+    <style name="Widget.WScanner.Button.Filled" parent="Widget.Material3.Button">
         <item name="android:minHeight">52dp</item>
         <item name="android:textAllCaps">false</item>
-        <item name="android:textStyle">bold</item>
-        <item name="android:letterSpacing">0.01</item>
-        <item name="backgroundTint">@color/accent_primary</item>
-        <item name="android:textColor">@color/bg_primary</item>
-        <item name="iconTint">@color/bg_primary</item>
+        <item name="android:textAppearance">@style/TextAppearance.WScanner.LabelLarge</item>
         <item name="cornerRadius">16dp</item>
-        <item name="rippleColor">@color/accent_light</item>
-        <item name="elevation">0dp</item>
     </style>
 
-    <style name="Widget.WScanner.Button.Secondary" parent="Widget.MaterialComponents.Button.OutlinedButton">
+    <style name="Widget.WScanner.Button.Tonal" parent="Widget.Material3.Button.TonalButton">
         <item name="android:minHeight">48dp</item>
         <item name="android:textAllCaps">false</item>
-        <item name="android:textStyle">bold</item>
-        <item name="android:textColor">@color/accent_primary</item>
-        <item name="iconTint">@color/accent_primary</item>
-        <item name="strokeColor">@color/border_focus</item>
-        <item name="strokeWidth">1dp</item>
+        <item name="cornerRadius">16dp</item>
+    </style>
+
+    <style name="Widget.WScanner.Button.Outlined" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:minHeight">48dp</item>
+        <item name="android:textAllCaps">false</item>
         <item name="cornerRadius">15dp</item>
-        <item name="rippleColor">@color/accent_soft</item>
     </style>
 
-    <style name="TextAppearance.WScanner.Eyebrow" parent="TextAppearance.MaterialComponents.Caption">
-        <item name="android:textColor">@color/text_tertiary</item>
-        <item name="android:textSize">10sp</item>
-        <item name="android:textStyle">bold</item>
-        <item name="android:letterSpacing">0.12</item>
+    <!-- Alias legado -->
+    <style name="Widget.WScanner.Button.Primary" parent="Widget.WScanner.Button.Filled" />
+    <style name="Widget.WScanner.Button.Secondary" parent="Widget.WScanner.Button.Outlined" />
+
+    <style name="Widget.WScanner.Chip" parent="Widget.Material3.Chip.Filter">
+        <item name="chipBackgroundColor">?attr/colorSurfaceContainerHigh</item>
+        <item name="chipStrokeColor">?attr/colorOutlineVariant</item>
+        <item name="chipStrokeWidth">1dp</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
     </style>
 
-    <style name="TextAppearance.WScanner.Title" parent="TextAppearance.MaterialComponents.Headline6">
-        <item name="android:textColor">@color/text_primary</item>
-        <item name="android:textSize">22sp</item>
-        <item name="android:textStyle">bold</item>
-        <item name="android:fontFamily">sans-serif-medium</item>
+    <style name="Widget.WScanner.Fab" parent="Widget.Material3.FloatingActionButton.Primary" />
+
+    <style name="ThemeOverlay.WScanner.BottomSheet" parent="ThemeOverlay.Material3.BottomSheetDialog">
+        <item name="bottomSheetStyle">@style/Widget.WScanner.BottomSheet</item>
     </style>
 
-    <style name="TextAppearance.WScanner.Body" parent="TextAppearance.MaterialComponents.Body2">
-        <item name="android:textColor">@color/text_secondary</item>
-        <item name="android:textSize">14sp</item>
-        <item name="android:lineSpacingExtra">3sp</item>
+    <style name="Widget.WScanner.BottomSheet" parent="Widget.Material3.BottomSheet.Modal">
+        <item name="backgroundTint">?attr/colorSurfaceContainerHigh</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.WScanner.ExtraLarge</item>
     </style>
 
-    <style name="DrawerText" parent="TextAppearance.MaterialComponents.Body1">
+    <style name="DrawerText" parent="TextAppearance.Material3.BodyLarge">
         <item name="android:textSize">14sp</item>
         <item name="android:fontFamily">sans-serif-medium</item>
     </style>

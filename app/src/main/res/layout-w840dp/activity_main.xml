@@ -11,7 +11,7 @@
 
                 <com.google.android.material.appbar.MaterialToolbar android:id="@+id/toolbar" android:layout_width="match_parent" android:layout_height="68dp" android:background="@color/bg_secondary" app:title="WScanner" app:titleTextColor="@color/text_primary" app:subtitleTextColor="@color/text_tertiary" app:elevation="0dp" app:subtitle="Analizador de red local"/>
 
-                <ProgressBar android:id="@+id/progressScan" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="3dp" android:visibility="gone" android:progressTint="#FF00E5FF" android:progressBackgroundTint="#FF21262D"/>
+                <ProgressBar android:id="@+id/progressScan" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="3dp" android:visibility="gone" android:indeterminateTint="@color/accent_primary" android:progressTint="@color/accent_primary" android:progressBackgroundTint="@color/bg_surface"/>
             </com.google.android.material.appbar.AppBarLayout>
 
             <!-- ═══ Scanner + Detail en split pane ═══ -->
@@ -99,7 +99,7 @@
         </androidx.constraintlayout.widget.ConstraintLayout>
 
         <!-- FAB -->
-        <com.google.android.material.floatingactionbutton.FloatingActionButton android:id="@+id/btnScan" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="bottom|end" android:layout_margin="28dp" android:contentDescription="Escanear red" app:backgroundTint="#FF00E5FF" app:tint="#FF0D1117" app:fabSize="normal" app:srcCompat="@drawable/ic_radar" app:elevation="8dp"/>
+        <com.google.android.material.floatingactionbutton.FloatingActionButton android:id="@+id/btnScan" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="bottom|end" android:layout_margin="28dp" android:contentDescription="Escanear red" app:backgroundTint="@color/accent_primary" app:tint="@color/bg_primary" app:fabSize="normal" app:srcCompat="@drawable/ic_radar" app:elevation="10dp" app:rippleColor="@color/accent_light"/>
     </androidx.coordinatorlayout.widget.CoordinatorLayout>
 
     <!-- Drawer -->

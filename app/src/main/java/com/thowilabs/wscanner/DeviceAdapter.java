@@ -4,6 +4,7 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.res.ColorStateList;
+import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -111,8 +112,11 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.Holder>
         Context ctx = h.itemView.getContext();
 
         int iconSize = dp(34, ctx);
+        int accent = resolveThemeColor(ctx, com.google.android.material.R.attr.colorPrimary, 0xFF42D9FF);
+        int outlineActive = resolveThemeColor(ctx, com.google.android.material.R.attr.colorOutlineVariant, 0xFF223149);
+        int outlineIdle = resolveThemeColor(ctx, com.google.android.material.R.attr.colorOutline, 0xFF182235);
         IconicsDrawable drawable = new IconicsDrawable(ctx, deviceIconName(d));
-        drawable.setColorList(ColorStateList.valueOf(0xFF42D9FF));
+        drawable.setColorList(ColorStateList.valueOf(accent));
         drawable.setSizeXPx(iconSize);
         drawable.setSizeYPx(iconSize);
         h.iconView.setImageDrawable(drawable);
@@ -147,7 +151,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.Holder>
 
         int dotColor = d.online ? 0xFF4ADE80 : 0xFF68778C;
         h.statusDot.setBackgroundTintList(ColorStateList.valueOf(dotColor));
-        h.card.setStrokeColor(d.online ? 0xFF223149 : 0xFF182235);
+        h.card.setStrokeColor(d.online ? outlineActive : outlineIdle);
 
         h.itemView.setOnClickListener(v -> {
             if (clickListener != null) {
@@ -352,6 +356,15 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.Holder>
 
     private static int dp(int value, Context context) {
         return Math.round(value * context.getResources().getDisplayMetrics().density);
+    }
+
+    private static int resolveThemeColor(Context ctx, int attr, int fallback) {
+        TypedValue tv = new TypedValue();
+        if (ctx.getTheme().resolveAttribute(attr, tv, true)) {
+            if (tv.resourceId != 0) return androidx.core.content.ContextCompat.getColor(ctx, tv.resourceId);
+            return tv.data;
+        }
+        return fallback;
     }
 
     static class Holder extends RecyclerView.ViewHolder {

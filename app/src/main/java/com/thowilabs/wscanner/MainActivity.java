@@ -38,6 +38,10 @@ import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.appcompat.app.ActionBarDrawerToggle;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.SearchView;
@@ -126,6 +130,9 @@ public class MainActivity extends AppCompatActivity
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        // Edge-to-edge: dibujamos bajo la barra de estado y navegación y
+        // aplicamos los insets a los elementos afectados.
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         setContentView(R.layout.activity_main);
 
         // Toolbar
@@ -260,6 +267,40 @@ public class MainActivity extends AppCompatActivity
         setupEmptyPulse();
         layoutScannerContent.post(() -> animateScreenIn(layoutScannerContent));
 
+        applyEdgeToEdgeInsets();
+    }
+
+    private void applyEdgeToEdgeInsets() {
+        View appBar = findViewById(R.id.appBar);
+        if (appBar != null) {
+            ViewCompat.setOnApplyWindowInsetsListener(appBar, (v, insets) -> {
+                Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+                v.setPadding(v.getPaddingLeft(), bars.top, v.getPaddingRight(), v.getPaddingBottom());
+                return insets;
+            });
+        }
+        if (btnScan != null) {
+            final int baseMargin = dp(22);
+            ViewCompat.setOnApplyWindowInsetsListener(btnScan, (v, insets) -> {
+                Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars()
+                        | WindowInsetsCompat.Type.ime());
+                ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) v.getLayoutParams();
+                lp.bottomMargin = baseMargin + bars.bottom;
+                lp.rightMargin = baseMargin + bars.right;
+                v.setLayoutParams(lp);
+                return insets;
+            });
+        }
+        View list = findViewById(R.id.listDevices);
+        if (list != null) {
+            final int basePad = list.getPaddingBottom();
+            ViewCompat.setOnApplyWindowInsetsListener(list, (v, insets) -> {
+                Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+                v.setPadding(v.getPaddingLeft(), v.getPaddingTop(), v.getPaddingRight(),
+                        basePad + bars.bottom);
+                return insets;
+            });
+        }
     }
 
     // ── Info de red ────────────────────────────────────────────────
