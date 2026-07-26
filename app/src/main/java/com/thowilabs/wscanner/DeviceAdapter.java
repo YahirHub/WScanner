@@ -149,7 +149,9 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.Holder>
         h.itemView.setTranslationY(0f);
         h.itemView.setAlpha(targetAlpha);
 
-        int dotColor = d.online ? 0xFF4ADE80 : 0xFF68778C;
+        int dotColor = d.online
+                ? androidx.core.content.ContextCompat.getColor(ctx, R.color.status_online)
+                : resolveThemeColor(ctx, com.google.android.material.R.attr.colorOnSurfaceVariant, 0xFF68778C);
         h.statusDot.setBackgroundTintList(ColorStateList.valueOf(dotColor));
         h.card.setStrokeColor(d.online ? outlineActive : outlineIdle);
 

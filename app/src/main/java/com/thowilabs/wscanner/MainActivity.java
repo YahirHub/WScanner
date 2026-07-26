@@ -487,8 +487,10 @@ public class MainActivity extends AppCompatActivity
         SearchView.SearchAutoComplete autoComplete = searchView.findViewById(
                 androidx.appcompat.R.id.search_src_text);
         if (autoComplete != null) {
-            autoComplete.setTextColor(0xFFE6EDF3);
-            autoComplete.setHintTextColor(0xFF68778C);
+            autoComplete.setTextColor(com.google.android.material.color.MaterialColors.getColor(
+                    autoComplete, com.google.android.material.R.attr.colorOnSurface));
+            autoComplete.setHintTextColor(com.google.android.material.color.MaterialColors.getColor(
+                    autoComplete, com.google.android.material.R.attr.colorOnSurfaceVariant));
         }
 
         searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
@@ -706,11 +708,11 @@ public class MainActivity extends AppCompatActivity
     }
 
     private void updateMonitorChipStyle() {
-        if (activeScanMode) {
-            btnScan.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFFF85149));
-        } else {
-            btnScan.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFF42D9FF));
-        }
+        int tint = com.google.android.material.color.MaterialColors.getColor(btnScan,
+                activeScanMode
+                        ? com.google.android.material.R.attr.colorError
+                        : com.google.android.material.R.attr.colorPrimary);
+        btnScan.setBackgroundTintList(android.content.res.ColorStateList.valueOf(tint));
     }
 
     private void setScanning(boolean scanning) {
@@ -721,7 +723,9 @@ public class MainActivity extends AppCompatActivity
         if (scanning) {
             // Transform FAB into red stop button
             btnScan.setImageResource(R.drawable.ic_stop);
-            btnScan.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFFF85149));
+            btnScan.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                    com.google.android.material.color.MaterialColors.getColor(
+                            btnScan, com.google.android.material.R.attr.colorError)));
 
             progressScan.setIndeterminate(true);
             progressScan.setProgress(0);
@@ -802,7 +806,9 @@ public class MainActivity extends AppCompatActivity
         ImageView iconView = findViewById(R.id.detailIcon);
         int sizePx = (int) (32 * ctx.getResources().getDisplayMetrics().density);
         IconicsDrawable drawable = new IconicsDrawable(ctx, deviceIconName(d));
-        drawable.setColorList(android.content.res.ColorStateList.valueOf(0xFF42D9FF));
+        drawable.setColorList(android.content.res.ColorStateList.valueOf(
+                com.google.android.material.color.MaterialColors.getColor(
+                        iconView, com.google.android.material.R.attr.colorPrimary)));
         drawable.setSizeXPx(sizePx);
         drawable.setSizeYPx(sizePx);
         iconView.setImageDrawable(drawable);
@@ -896,7 +902,8 @@ public class MainActivity extends AppCompatActivity
 
                 TextView portView = new TextView(ctx);
                 portView.setText(label);
-                portView.setTextColor(0xFF8DEBFF);
+                portView.setTextColor(com.google.android.material.color.MaterialColors.getColor(
+                        portsList, com.google.android.material.R.attr.colorPrimary));
                 portView.setTextSize(12);
                 portView.setTypeface(android.graphics.Typeface.MONOSPACE);
                 portView.setBackgroundResource(R.drawable.bg_chip_neutral);

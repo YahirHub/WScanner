@@ -3,7 +3,7 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#0D1117"
+    android:background="?attr/colorSurface"
     android:padding="24dp">
 
     <LinearLayout
@@ -17,7 +17,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/wol_title"
-            android:textColor="#FF00E5FF"
+            android:textColor="?attr/colorPrimary"
             android:textSize="22sp"
             android:textStyle="bold"
             android:fontFamily="sans-serif-medium"
@@ -27,7 +27,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Enciende remotamente PCs y NAS en tu red local"
-            android:textColor="#FF8B949E"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:textSize="13sp"
             android:layout_marginBottom="24dp" />
 
@@ -36,7 +36,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Dirección MAC"
-            android:textColor="#FF6E7681"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:textSize="11sp"
             android:fontFamily="sans-serif-medium"
             android:letterSpacing="0.06"
@@ -47,8 +47,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:hint="@string/wol_mac_hint"
-            android:textColor="#FFE6EDF3"
-            android:textColorHint="#FF6E7681"
+            android:textColor="?attr/colorOnSurface"
+            android:textColorHint="?attr/colorOnSurfaceVariant"
             android:textSize="16sp"
             android:fontFamily="monospace"
             android:background="@drawable/card_bg_about"
@@ -62,7 +62,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Broadcast IP"
-            android:textColor="#FF6E7681"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:textSize="11sp"
             android:fontFamily="sans-serif-medium"
             android:letterSpacing="0.06"
@@ -73,7 +73,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/wol_broadcast_hint"
-            android:textColor="#FFE6EDF3"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="14sp"
             android:fontFamily="monospace"
             android:background="@drawable/card_bg_about"
@@ -87,7 +87,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/wol_send"
-            android:textColor="#FF0D1117"
+            android:textColor="?attr/colorOnPrimary"
             android:textSize="15sp"
             android:textStyle="bold"
             android:fontFamily="sans-serif-medium"
@@ -103,7 +103,7 @@
             android:id="@+id/txtWolResult"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="#FF3FB950"
+            android:textColor="@color/status_online"
             android:textSize="13sp"
             android:visibility="gone"
             android:layout_marginBottom="24dp" />
@@ -112,7 +112,7 @@
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:background="#FF30363D"
+            android:background="?attr/colorOutlineVariant"
             android:layout_marginBottom="20dp" />
 
         <!-- Known devices list -->
@@ -120,7 +120,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/wol_devices_title"
-            android:textColor="#FF8B949E"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:textSize="11sp"
             android:fontFamily="sans-serif-medium"
             android:letterSpacing="0.06"
@@ -137,7 +137,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Ejecuta un escaneo para detectar MACs"
-            android:textColor="#FF6E7681"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:textSize="12sp" />
 
     </LinearLayout>

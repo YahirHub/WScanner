@@ -3,7 +3,7 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#0D1117"
+    android:background="?attr/colorSurface"
     android:padding="24dp">
 
     <LinearLayout
@@ -16,7 +16,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/history_title"
-            android:textColor="#FF00E5FF"
+            android:textColor="?attr/colorPrimary"
             android:textSize="22sp"
             android:textStyle="bold"
             android:fontFamily="sans-serif-medium"
@@ -26,7 +26,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Resultados de escaneos anteriores"
-            android:textColor="#FF8B949E"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:textSize="13sp"
             android:layout_marginBottom="24dp" />
 

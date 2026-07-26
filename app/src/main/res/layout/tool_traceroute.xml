@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#0D1117">
+    android:background="?attr/colorSurface">
 
     <!-- Fixed header -->
     <LinearLayout
@@ -18,7 +18,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/traceroute_title"
-            android:textColor="#FF00E5FF"
+            android:textColor="?attr/colorPrimary"
             android:textSize="22sp"
             android:textStyle="bold"
             android:fontFamily="sans-serif-medium"
@@ -28,7 +28,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Traza la ruta de paquetes hasta un destino"
-            android:textColor="#FF8B949E"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:textSize="13sp"
             android:layout_marginBottom="20dp" />
 
@@ -38,8 +38,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:hint="@string/traceroute_host_hint"
-            android:textColor="#FFE6EDF3"
-            android:textColorHint="#FF6E7681"
+            android:textColor="?attr/colorOnSurface"
+            android:textColorHint="?attr/colorOnSurfaceVariant"
             android:textSize="15sp"
             android:fontFamily="monospace"
             android:background="@drawable/card_bg_about"
@@ -66,7 +66,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/traceroute_max_hops"
-                    android:textColor="#FF6E7681"
+                    android:textColor="?attr/colorOnSurfaceVariant"
                     android:textSize="11sp"
                     android:fontFamily="sans-serif-medium"
                     android:letterSpacing="0.06"
@@ -77,7 +77,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="30"
-                    android:textColor="#FFE6EDF3"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="14sp"
                     android:fontFamily="monospace"
                     android:background="@drawable/card_bg_about"
@@ -93,7 +93,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/traceroute_start"
-                android:textColor="#FF0D1117"
+                android:textColor="?attr/colorOnPrimary"
                 android:textSize="15sp"
                 android:textStyle="bold"
                 android:fontFamily="sans-serif-medium"
@@ -111,8 +111,8 @@
             android:layout_width="match_parent"
             android:layout_height="3dp"
             android:visibility="gone"
-            android:progressTint="#FF00E5FF"
-            android:progressBackgroundTint="#FF21262D"
+            android:progressTint="?attr/colorPrimary"
+            android:progressBackgroundTint="?attr/colorSurfaceVariant"
             android:layout_marginBottom="6dp" />
 
         <!-- Done indicator -->
@@ -120,7 +120,7 @@
             android:id="@+id/txtTraceDone"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="#FF3FB950"
+            android:textColor="@color/status_online"
             android:textSize="13sp"
             android:visibility="gone" />
     </LinearLayout>
