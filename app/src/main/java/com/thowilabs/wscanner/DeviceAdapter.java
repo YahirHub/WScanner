@@ -237,7 +237,8 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.Holder>
                 || contains(d.deviceType, query)
                 || contains(d.manufacturer, query)
                 || contains(d.model, query)
-                || contains(d.osHint, query);
+                || contains(d.osHint, query)
+                || contains(d.osFingerprint, query);
     }
 
     private boolean contains(String value, String query) {
@@ -257,6 +258,10 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.Holder>
         if (d.deviceType != null && !d.deviceType.isEmpty()
                 && !d.deviceType.equalsIgnoreCase(d.name)) {
             appendPart(info, d.deviceType);
+        }
+        if (d.osFingerprint != null && !d.osFingerprint.isEmpty()
+                && d.osFingerprintConfidence >= 50) {
+            appendPart(info, d.osFingerprint);
         }
         if (info.length() == 0 && d.mac != null && !d.mac.equals("N/A")) {
             appendPart(info, "MAC " + d.mac);

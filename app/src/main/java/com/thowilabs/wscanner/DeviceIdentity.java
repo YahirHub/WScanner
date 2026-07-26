@@ -65,6 +65,15 @@ public final class DeviceIdentity {
         if (isUsefulMetadata(incoming.osHint) && !isUsefulMetadata(existing.osHint)) {
             existing.osHint = incoming.osHint;
         }
+        if (isUsefulMetadata(incoming.osFingerprint)
+                && incoming.osFingerprintConfidence > existing.osFingerprintConfidence) {
+            existing.osFingerprint = incoming.osFingerprint;
+            existing.osFingerprintConfidence = incoming.osFingerprintConfidence;
+        }
+        if (incoming.ttl > 0 && existing.ttl <= 0) {
+            existing.ttl = incoming.ttl;
+        }
+        if (incoming.macRandomized) existing.macRandomized = true;
         if (shouldReplaceDeviceType(existing.deviceType, incoming.deviceType)) {
             existing.deviceType = incoming.deviceType;
         }

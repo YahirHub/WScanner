@@ -11,13 +11,16 @@ public class Device {
     public String vendor;
     public String discoveryMethod;   // "Local", "mDNS", "SSDP", "NetBIOS", "DNS", "HTTP", "OUI DB", "TCP", "Heurística"
     public String discoveryDetail;  // Valor crudo encontrado (ej: "iPhone-de-Juan.local")
-    public int ttl = -1;            // TTL del ping (-1 = no disponible, requiere raw sockets)
+    public int ttl = -1;            // TTL del ping (-1 = no disponible). Se obtiene vía /system/bin/ping (offline)
     public List<Integer> openPorts = new ArrayList<>();
     public List<String> serviceNames = new ArrayList<>();
     public String deviceType = null;    // tipo inferido por señales/protocolos locales
     public String manufacturer = null;  // metadato autoanunciado por el dispositivo
     public String model = null;         // metadato autoanunciado por el dispositivo
     public String osHint = null;        // pista declarada por banners/protocolos, no fingerprint remoto
+    public String osFingerprint = null; // clasificación heurística de SO (TTL + puertos + servicios)
+    public int osFingerprintConfidence = 0; // 0-100, calidad de la inferencia
+    public boolean macRandomized = false;   // MAC locally-administered (Android 10+ randomization)
     public boolean online = true;       // false = visto antes, ya no responde
     public String userLabel = null;     // etiqueta personalizada del usuario
     public long lastSeen = 0;           // System.currentTimeMillis() del último descubrimiento

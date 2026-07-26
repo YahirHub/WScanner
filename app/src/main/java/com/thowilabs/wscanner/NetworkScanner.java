@@ -778,6 +778,20 @@ public class NetworkScanner {
             portDevice.discoveryDetail += " · " + protocolDetail;
             portDevice.osHint = DeviceIdentity.inferOsHint(protocolDetail);
         }
+
+        // ── Fingerprint de SO (TTL + puertos + banners), 100% offline ──
+        int ttl = TtlProbe.probe(ip);
+        if (ttl > 0) portDevice.ttl = ttl;
+        boolean isGateway = gateway != null && gateway.equals(ip);
+        OsFingerprint.Result os = OsFingerprint.classify(
+                ttl, openPortsList, serviceNamesList,
+                (portDevice.osHint != null ? portDevice.osHint + " " : "")
+                        + (portDevice.discoveryDetail != null ? portDevice.discoveryDetail : ""),
+                isGateway);
+        if (os != null) {
+            portDevice.osFingerprint = os.label;
+            portDevice.osFingerprintConfidence = os.confidence;
+        }
         if (!isCancelled(generation)) callback.onDeviceFound(portDevice);
     }
 

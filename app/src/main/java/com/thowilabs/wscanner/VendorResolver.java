@@ -72,6 +72,17 @@ public class VendorResolver {
             return "Desconocido";
         }
 
+        // MAC locally-administered (bit 1 del primer octeto) → aleatoria/privada.
+        // Android 10+, iOS 14+ y Windows 10+ rotan la MAC por red para preservar
+        // la privacidad, y la base OUI no contiene esos prefijos por diseño.
+        try {
+            int firstOctet = Integer.parseInt(clean.substring(0, 2), 16);
+            if ((firstOctet & 0x02) != 0) {
+                Log.v(TAG, "resolve('" + mac + "') → MAC aleatoria (LAA)");
+                return "MAC aleatoria (privacidad)";
+            }
+        } catch (NumberFormatException ignored) {}
+
         String prefix = clean.substring(0, 6);
         String vendor = ouiMap.get(prefix);
         String result = (vendor != null) ? vendor : "Desconocido";
@@ -81,5 +92,22 @@ public class VendorResolver {
 
     public int getEntryCount() {
         return ouiMap.size();
+    }
+
+    /**
+     * Devuelve true si la MAC tiene el bit "locally administered" activo,
+     * síntoma de que el sistema operativo la aleatoriza por privacidad.
+     * Útil para que la UI muestre un aviso en lugar de un fabricante inventado.
+     */
+    public static boolean isRandomized(String mac) {
+        if (mac == null) return false;
+        String clean = mac.replaceAll("[:\\-. ]", "").toUpperCase();
+        if (clean.length() < 2) return false;
+        try {
+            int firstOctet = Integer.parseInt(clean.substring(0, 2), 16);
+            return (firstOctet & 0x02) != 0;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 }
